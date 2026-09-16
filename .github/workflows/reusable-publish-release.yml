@@ -13,31 +13,33 @@ on:
         required: false
         type: string
         default: 'CHANGELOG.md'
-      target_branch:
-        description: 'Branch to tag against'
-        required: false
-        type: string
-        default: 'main'
 
 jobs:
   publish:
+    if: startsWith(github.event.head_commit.message, inputs.commit_message_prefix)
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - name: Checkout repository at trigger commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          ref: ${{ inputs.target_branch }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
 
       - name: Extract Tag and Release Notes
         id: release_info
         env:
           COMMIT_MSG: ${{ github.event.head_commit.message }}
+          PREFIX: ${{ inputs.commit_message_prefix }}
           CHANGELOG_PATH: ${{ inputs.changelog_path }}
         run: |
           echo "Commit message: $COMMIT_MSG"
+
+          if [[ "$COMMIT_MSG" != "$PREFIX"* ]]; then
+            echo "::error::Commit message does not start with expected prefix: $PREFIX"
+            exit 1
+          fi
 
           # Extract tag name (e.g., v1.2.0 or v1.2.0-rc.1)
           TAG_NAME=$(echo "$COMMIT_MSG" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?' | head -n 1)
@@ -68,10 +70,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.release_info.outputs.tag_name }}
-          TARGET: ${{ inputs.target_branch }}
+          TARGET_SHA: ${{ github.sha }}
         run: |
-          echo "Publishing release for tag: $TAG on branch: $TARGET"
+          echo "Publishing release for tag: $TAG at commit SHA: $TARGET_SHA"
           gh release create "$TAG" \
             --title "$TAG" \
             --notes-file RELEASE_NOTES.md \
-            --target "$TARGET"
+            --target "$TARGET_SHA"

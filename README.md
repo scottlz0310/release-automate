@@ -2,7 +2,7 @@
 
 GitHub Organization (`scottlz0310`) 向けのリリース自動化 Reusable Workflows 集です。
 
-`main` ブランチの直接 push 禁止環境において、手動バージョン指定によるリリース準備 PR 起票と、PR マージ後のタグ打ち・GitHub Release 公開を自動化します。
+`main` ブランチの直接 push 禁止環境において、手動バージョン指定によるリリース準備 PR 起票と、PR マージ後のタグ打ち・GitHub Release 公開を安全に自動化します。
 
 ---
 
@@ -10,11 +10,13 @@ GitHub Organization (`scottlz0310`) 向けのリリース自動化 Reusable Work
 
 1. [`.github/workflows/reusable-prepare-release.yml`](.github/workflows/reusable-prepare-release.yml)
    - 手動トリガー (`workflow_dispatch`) を受け、GitHub App 名義でリリース準備 PR を自動起票。
-   - バージョン定義ファイルの更新コマンド実行（任意）。
+   - `target_version` の正規表現バリデーション（SemVer 検証、コマンドインジェクション防止）。
+   - 事前定義された安全な `bump_strategy`（`npm`, `poetry`, `go`, `none`）によるバージョン定義ファイル更新。
    - `CHANGELOG.md` の `[Unreleased]` 確定および比較リンク更新。
+   - サードパーティ Actions を完全なコミット SHA にピン留め。
 2. [`.github/workflows/reusable-publish-release.yml`](.github/workflows/reusable-publish-release.yml)
-   - `main` への Squash merge コミットを検知。
-   - Git タグの作成と GitHub Release ページの公開（CHANGELOG からリリースノート自動抽出）。
+   - `main` への Squash merge コミットをジョブレベルで検知・強制。
+   - リリースコミット SHA (`github.sha`) をピン留めして Git タグ作成および GitHub Release 公開（CHANGELOG からリリースノート自動抽出）。
 
 ---
 
@@ -53,8 +55,8 @@ jobs:
     secrets: inherit
     with:
       target_version: ${{ inputs.target_version }}
-      # 必要に応じてバージョン更新コマンドを指定（例: Node.js の場合）
-      bump_command: "npm version ${{ inputs.target_version }} --no-git-tag-version"
+      # 言語に応じた bump_strategy を指定 (npm, poetry, go, none)
+      bump_strategy: "npm"
 ```
 
 ### 2. `.github/workflows/publish-release.yml`
@@ -69,7 +71,6 @@ on:
 
 jobs:
   publish:
-    if: startsWith(github.event.head_commit.message, 'chore(release):')
     uses: scottlz0310/release-automate/.github/workflows/reusable-publish-release.yml@v1
     permissions:
       contents: write

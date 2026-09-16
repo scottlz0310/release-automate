@@ -17,9 +17,10 @@ Organization (`scottlz0310`) 内の全リポジトリで共通利用できるよ
       │ uses (secrets: inherit)
       └───────────────────────────────────► [.github/workflows/reusable-prepare-release.yml]
                                                   │
+                                                  ├─ target_version のセマンティックバリデーション
                                                   ├─ GitHub App トークンを発行 (短寿命 Installation Token)
                                                   ├─ 指定ブランチ (main) をチェックアウト
-                                                  ├─ bump_command 実行 (言語固有のバージョンファイル更新)
+                                                  ├─ bump_strategy 実行 (安全な固定操作: npm, poetry, go)
                                                   ├─ CHANGELOG.md の [Unreleased] 確定・比較リンク更新
                                                   └─ release/vX.Y.Z ブランチを push して PR 起票 (Bot 名義)
       ┌───────────────────────────────────────────┘
@@ -31,8 +32,10 @@ Organization (`scottlz0310`) 内の全リポジトリで共通利用できるよ
       │ uses
       └───────────────────────────────────► [.github/workflows/reusable-publish-release.yml]
                                                   │
+                                                  ├─ prefix 一致条件をジョブ単位で強制
+                                                  ├─ トリガーコミット (${{ github.sha }}) をチェックアウト
                                                   ├─ マージコミットからバージョン / CHANGELOG 抽出
-                                                  ├─ git タグ発行 (vX.Y.Z)
+                                                  ├─ git タグ発行 (vX.Y.Z @ ${{ github.sha }})
                                                   └─ GitHub Release 作成 (Release Notes 添付) & 公開
 ```
 
@@ -76,8 +79,9 @@ Organization の **Settings → Secrets and variables → Actions** に以下を
 #### 入力パラメータ (`inputs`)
 | パラメータ名 | 型 | 必須 | デフォルト値 | 説明 |
 | :--- | :--- | :--- | :--- | :--- |
-| `target_version` | string | **Yes** | - | リリース対象バージョン（例: `1.2.0` または `v1.2.0`） |
-| `bump_command` | string | No | `""` | バージョンファイル更新用シェルコマンド（例: `npm version ${{ inputs.target_version }} --no-git-tag-version`） |
+| `target_version` | string | **Yes** | - | リリース対象バージョン（例: `1.2.0` または `v1.2.0`）。SemVer 形式を厳格に検証 |
+| `bump_strategy` | string | No | `none` | バージョンファイル更新戦略 (`none`, `npm`, `poetry`, `go`) |
+| `version_file` | string | No | `""` | `bump_strategy` が `go` の場合の対象ファイルパス |
 | `changelog_path` | string | No | `CHANGELOG.md` | CHANGELOG ファイルの相対パス |
 | `base_branch` | string | No | `main` | PR のマージ先ベースブランチ |
 | `branch_prefix` | string | No | `release/` | 作成するリリースブランチの接頭辞 |
@@ -86,15 +90,16 @@ Organization の **Settings → Secrets and variables → Actions** に以下を
 #### シークレット (`secrets`)
 | シークレット名 | 必須 | 説明 |
 | :--- | :--- | :--- |
-| `app_id` | **Yes** | GitHub App の App ID |
-| `private_key` | **Yes** | GitHub App の秘密鍵（PEM 形式） |
+| `RELEASE_BOT_APP_ID` | **Yes** | GitHub App の App ID |
+| `RELEASE_BOT_PRIVATE_KEY` | **Yes** | GitHub App の秘密鍵（PEM 形式） |
 
 #### 処理の流れ
-1. `actions/create-github-app-token@v1` で短寿命トークンを取得。
-2. ベースブランチをチェックアウトし、Git ユーザーを Bot 名義（`${app-slug}[bot]`）に設定。
-3. `bump_command` が指定されていれば実行。
-4. `changelog_path` の `[Unreleased]` セクションを `[X.Y.Z] - YYYY-MM-DD` に確定し、最上部に新しい空の `[Unreleased]` を挿入。末尾の比較リンク（GitHub diff リンク）を更新。
-5. `peter-evans/create-pull-request@v6` により、Bot トークンを用いて `release/vX.Y.Z` ブランチを作成し PR を起票。
+1. `target_version` を正規表現でバリデーション（SemVer 以外の不正文字列やコマンドインジェクションを遮断）。
+2. `actions/create-github-app-token`（SHA 固定）で短寿命トークンを取得。
+3. ベースブランチをチェックアウトし、Git ユーザーを Bot 名義（`${app-slug}[bot]`）に設定。
+4. `bump_strategy` に応じた固定コマンドを実行（`eval` は使用せず、安全に正規化されたバージョンデータを渡す）。
+5. `changelog_path` の `[Unreleased]` セクションを `[X.Y.Z] - YYYY-MM-DD` に確定し、最上部に新しい空の `[Unreleased]` を挿入。末尾の比較リンク（GitHub diff リンク）を更新。
+6. `peter-evans/create-pull-request`（SHA 固定）により、Bot トークンを用いて `release/vX.Y.Z` ブランチを作成し PR を起票。
 
 ---
 
@@ -105,16 +110,16 @@ Organization の **Settings → Secrets and variables → Actions** に以下を
 | :--- | :--- | :--- | :--- | :--- |
 | `commit_message_prefix` | string | No | `chore(release):` | リリースマージコミットを検知するための接頭辞 |
 | `changelog_path` | string | No | `CHANGELOG.md` | リリースノート抽出対象の CHANGELOG パス |
-| `target_branch` | string | No | `main` | タグを打つ対象ブランチ |
 
 #### 必要な権限 (`permissions`)
 * `contents: write`（タグのプッシュおよび GitHub Release の作成）
 
 #### 処理の流れ
-1. コミットメッセージが `commit_message_prefix` で始まっているか確認。
-2. コミットメッセージからタグ名（`vX.Y.Z`）を抽出。
-3. `changelog_path` から該当バージョンの変更履歴本文（Markdown）を抽出。
-4. `gh release create` を実行し、Git タグ作成と Release Notes 添付・公開を同時に完了。
+1. `publish` ジョブレベルで `startsWith(github.event.head_commit.message, inputs.commit_message_prefix)` を強制評価。
+2. トリガーイベントの正確なコミット SHA (`${{ github.sha }}`) をチェックアウト（可変ブランチへの依存を排除）。
+3. コミットメッセージからタグ名（`vX.Y.Z`）を抽出。
+4. `changelog_path` から該当バージョンの変更履歴本文（Markdown）を抽出。
+5. `gh release create` を実行し、該当コミット SHA に対して Git タグ作成と Release Notes 添付・公開を同時に完了。
 
 ---
 
@@ -142,16 +147,26 @@ jobs:
     secrets: inherit
     with:
       target_version: ${{ inputs.target_version }}
-      # 言語に応じたバージョン更新コマンドを指定（不要なら省略可）
-      bump_command: "npm version ${{ inputs.target_version }} --no-git-tag-version"
+      # 言語に応じた安全な bump_strategy を指定（不要なら省略可）
+      bump_strategy: "npm"
 ```
 
-#### 言語別 `bump_command` 例
-- **Node.js**: `"npm version ${{ inputs.target_version }} --no-git-tag-version"`
-- **Go**: `"sed -i -E 's/Version = \".*\"/Version = \"${{ inputs.target_version }}\"/' internal/version/version.go"`
-- **Python (Poetry)**: `"poetry version ${{ inputs.target_version }}"`
-- **Rust (Cargo)**: `"sed -i -E 's/^version = \".*\"/version = \"${{ inputs.target_version }}\"/' Cargo.toml"`
-- **なし（CHANGELOG のみ管理）**: `bump_command` を省略
+#### 言語別設定例
+- **Node.js**:
+  ```yaml
+  bump_strategy: "npm"
+  ```
+- **Python (Poetry)**:
+  ```yaml
+  bump_strategy: "poetry"
+  ```
+- **Go**:
+  ```yaml
+  bump_strategy: "go"
+  version_file: "internal/version/version.go"
+  ```
+- **なし（CHANGELOG のみ管理）**:
+  `bump_strategy` を省略（既定値: `none`）
 
 ### 4.2. `.github/workflows/publish-release.yml`
 
@@ -165,7 +180,6 @@ on:
 
 jobs:
   publish:
-    if: startsWith(github.event.head_commit.message, 'chore(release):')
     uses: scottlz0310/release-automate/.github/workflows/reusable-publish-release.yml@v1
     permissions:
       contents: write
@@ -182,4 +196,4 @@ jobs:
 2. **レビュー & マージ:**
    GitHub App により自動作成された PR を確認し、`Squash and merge` を実行。
 3. **自動リリース完了:**
-   `main` へのマージをトリガーに `Publish Release` が発火し、Git タグ発行および GitHub Release ページへの公開が完了。
+   `main` へのマージコミットを検知して `Publish Release` が自動で発火し、該当コミットへの Git タグ付与および GitHub Release ページへの公開が完了。
