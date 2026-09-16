@@ -1,0 +1,168 @@
+name: Reusable Prepare Release
+
+on:
+  workflow_call:
+    inputs:
+      target_version:
+        description: 'Release target version (e.g. 1.2.0 or v1.2.0)'
+        required: true
+        type: string
+      bump_strategy:
+        description: 'Built-in version bump strategy: none, npm, poetry, go'
+        required: false
+        type: string
+        default: 'none'
+      version_file:
+        description: 'Path to version file (required when bump_strategy is go)'
+        required: false
+        type: string
+        default: ''
+      changelog_path:
+        description: 'Relative path to CHANGELOG.md'
+        required: false
+        type: string
+        default: 'CHANGELOG.md'
+      base_branch:
+        description: 'Base branch to create PR against'
+        required: false
+        type: string
+        default: 'main'
+      branch_prefix:
+        description: 'Prefix for release branch name'
+        required: false
+        type: string
+        default: 'release/'
+      commit_prefix:
+        description: 'Prefix for commit message and PR title'
+        required: false
+        type: string
+        default: 'chore(release):'
+    secrets:
+      RELEASE_BOT_APP_ID:
+        description: 'GitHub App ID for bot authentication'
+        required: true
+      RELEASE_BOT_PRIVATE_KEY:
+        description: 'GitHub App Private Key (PEM format)'
+        required: true
+
+jobs:
+  create-release-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate Target Version Format
+        id: validate_version
+        env:
+          RAW_VERSION: ${{ inputs.target_version }}
+        run: |
+          if ! [[ "$RAW_VERSION" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "::error::Invalid target_version format: '$RAW_VERSION'. Must be semantic versioning (e.g. 1.2.0, v1.2.0, 1.2.0-rc.1)"
+            exit 1
+          fi
+          VERSION="${RAW_VERSION#v}"
+          TAG_NAME="v${VERSION}"
+          echo "Validated Version: ${VERSION}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag_name=${TAG_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate GitHub App Token
+        id: app_token
+        uses: actions/create-github-app-token@c1a285145b9d317df6ced56c09f525b5c2b6f755 # v1.11.1
+        with:
+          app-id: ${{ secrets.RELEASE_BOT_APP_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.base_branch }}
+          fetch-depth: 0
+          token: ${{ steps.app_token.outputs.token }}
+
+      - name: Configure Git Author
+        run: |
+          git config user.name "${{ steps.app_token.outputs.app-slug }}[bot]"
+          git config user.email "${{ steps.app_token.outputs.app-slug }}[bot]@users.noreply.github.com"
+
+      - name: Run Version Bump Strategy
+        id: run_bump
+        env:
+          VERSION: ${{ steps.validate_version.outputs.version }}
+          STRATEGY: ${{ inputs.bump_strategy }}
+          VERSION_FILE: ${{ inputs.version_file }}
+        run: |
+          case "$STRATEGY" in
+            none|"")
+              echo "No bump strategy specified. Skipping version file update."
+              ;;
+            npm)
+              echo "Running npm version $VERSION --no-git-tag-version"
+              npm version "$VERSION" --no-git-tag-version
+              ;;
+            poetry)
+              echo "Running poetry version $VERSION"
+              poetry version "$VERSION"
+              ;;
+            go)
+              if [ -z "$VERSION_FILE" ]; then
+                echo "::error::version_file is required when bump_strategy is 'go'"
+                exit 1
+              fi
+              if [ ! -f "$VERSION_FILE" ]; then
+                echo "::error::version_file not found: $VERSION_FILE"
+                exit 1
+              fi
+              echo "Updating Go version file: $VERSION_FILE"
+              sed -i -E "s/(Version\s*=\s*\")[^\"]+(\")/\1${VERSION}\2/" "$VERSION_FILE"
+              ;;
+            *)
+              echo "::error::Unsupported bump_strategy: $STRATEGY. Supported strategies: none, npm, poetry, go"
+              exit 1
+              ;;
+          esac
+
+      - name: Update Changelog
+        id: update_changelog
+        env:
+          VERSION: ${{ steps.validate_version.outputs.version }}
+          TAG_NAME: ${{ steps.validate_version.outputs.tag_name }}
+          CHANGELOG_PATH: ${{ inputs.changelog_path }}
+        run: |
+          TODAY=$(date +'%Y-%m-%d')
+          if [ -f "$CHANGELOG_PATH" ]; then
+            echo "Updating $CHANGELOG_PATH..."
+            PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+            REPO_URL="https://github.com/${{ github.repository }}"
+
+            # Replace [Unreleased] header with new version and fresh [Unreleased]
+            sed -i "s/## \[Unreleased\]/## [Unreleased]\n\n## [${VERSION}] - ${TODAY}/" "$CHANGELOG_PATH"
+
+            # Update comparison links
+            if [ -n "$PREV_TAG" ]; then
+              sed -i "s|\[Unreleased\]: .*|\[Unreleased\]: ${REPO_URL}/compare/${TAG_NAME}...HEAD\n[${VERSION}]: ${REPO_URL}/compare/${PREV_TAG}...${TAG_NAME}|" "$CHANGELOG_PATH"
+            else
+              sed -i "s|\[Unreleased\]: .*|\[Unreleased\]: ${REPO_URL}/compare/${TAG_NAME}...HEAD\n[${VERSION}]: ${REPO_URL}/releases/tag/${TAG_NAME}|" "$CHANGELOG_PATH"
+            fi
+          else
+            echo "No changelog found at $CHANGELOG_PATH. Skipping changelog update."
+          fi
+
+      - name: Create Release Pull Request
+        uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7.0.11
+        with:
+          token: ${{ steps.app_token.outputs.token }}
+          branch: ${{ inputs.branch_prefix }}${{ steps.validate_version.outputs.tag_name }}
+          base: ${{ inputs.base_branch }}
+          title: "${{ inputs.commit_prefix }} ${{ steps.validate_version.outputs.tag_name }}"
+          body: |
+            ## Release ${{ steps.validate_version.outputs.tag_name }}
+
+            This automated pull request prepares the release for `${{ steps.validate_version.outputs.version }}`.
+
+            - **Version:** `${{ steps.validate_version.outputs.version }}`
+            - **Tag:** `${{ steps.validate_version.outputs.tag_name }}`
+            - Finalized `[Unreleased]` section in `${{ inputs.changelog_path }}`
+
+            > [!NOTE]
+            > Merging this PR (Squash and merge) into `${{ inputs.base_branch }}` will automatically trigger the release workflow to publish the GitHub Release and create tag `${{ steps.validate_version.outputs.tag_name }}`.
+          commit-message: "${{ inputs.commit_prefix }} prepare ${{ steps.validate_version.outputs.tag_name }}"
+          delete-branch: true
