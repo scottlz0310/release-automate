@@ -1,0 +1,77 @@
+name: Reusable Publish Release
+
+on:
+  workflow_call:
+    inputs:
+      commit_message_prefix:
+        description: 'Prefix of commit message to trigger release'
+        required: false
+        type: string
+        default: 'chore(release):'
+      changelog_path:
+        description: 'Relative path to CHANGELOG.md'
+        required: false
+        type: string
+        default: 'CHANGELOG.md'
+      target_branch:
+        description: 'Branch to tag against'
+        required: false
+        type: string
+        default: 'main'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.target_branch }}
+          fetch-depth: 0
+
+      - name: Extract Tag and Release Notes
+        id: release_info
+        env:
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+          CHANGELOG_PATH: ${{ inputs.changelog_path }}
+        run: |
+          echo "Commit message: $COMMIT_MSG"
+
+          # Extract tag name (e.g., v1.2.0 or v1.2.0-rc.1)
+          TAG_NAME=$(echo "$COMMIT_MSG" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?' | head -n 1)
+
+          if [ -z "$TAG_NAME" ]; then
+            echo "::error::Release tag could not be found in commit message: $COMMIT_MSG"
+            exit 1
+          fi
+
+          echo "Detected release tag: ${TAG_NAME}"
+          echo "tag_name=${TAG_NAME}" >> "$GITHUB_OUTPUT"
+          VERSION="${TAG_NAME#v}"
+
+          # Extract notes from CHANGELOG if available
+          if [ -f "$CHANGELOG_PATH" ]; then
+            awk -v ver="$VERSION" '
+              $0 ~ "^## \\[" ver "\\]" { flag=1; next }
+              $0 ~ "^## \\[" && flag { flag=0 }
+              flag { print }
+            ' "$CHANGELOG_PATH" > RELEASE_NOTES.md
+          fi
+
+          if [ ! -s RELEASE_NOTES.md ]; then
+            echo "Release ${TAG_NAME}" > RELEASE_NOTES.md
+          fi
+
+      - name: Create Git Tag and GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.release_info.outputs.tag_name }}
+          TARGET: ${{ inputs.target_branch }}
+        run: |
+          echo "Publishing release for tag: $TAG on branch: $TARGET"
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --notes-file RELEASE_NOTES.md \
+            --target "$TARGET"
