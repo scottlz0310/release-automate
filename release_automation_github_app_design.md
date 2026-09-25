@@ -20,7 +20,7 @@ Organization (`scottlz0310`) 内の全リポジトリで共通利用できるよ
                                                   ├─ target_version のセマンティックバリデーション
                                                   ├─ GitHub App トークンを発行 (短寿命 Installation Token)
                                                   ├─ 指定ブランチ (main) をチェックアウト
-                                                  ├─ bump_strategy 実行 (安全な固定操作: npm, poetry, go)
+                                                  ├─ bump_strategy 実行 (安全な固定操作: npm, rust, dotnet, go)
                                                   ├─ CHANGELOG.md の [Unreleased] 確定・比較リンク更新
                                                   └─ release/vX.Y.Z ブランチを push して PR 起票 (Bot 名義)
       ┌───────────────────────────────────────────┘
@@ -80,8 +80,8 @@ Organization の **Settings → Secrets and variables → Actions** に以下を
 | パラメータ名 | 型 | 必須 | デフォルト値 | 説明 |
 | :--- | :--- | :--- | :--- | :--- |
 | `target_version` | string | **Yes** | - | リリース対象バージョン（例: `1.2.0` または `v1.2.0`）。SemVer 形式を厳格に検証 |
-| `bump_strategy` | string | No | `none` | バージョンファイル更新戦略 (`none`, `npm`, `poetry`, `go`) |
-| `version_file` | string | No | `""` | `bump_strategy` が `go` の場合の対象ファイルパス |
+| `bump_strategy` | string | No | `none` | バージョンファイル更新戦略 (`none`, `npm`, `rust`, `dotnet`, `go`) |
+| `version_file` | string | No | `""` | `bump_strategy` が `go` または `dotnet` の場合の対象ファイルパス（`rust` では任意指定） |
 | `changelog_path` | string | No | `CHANGELOG.md` | CHANGELOG ファイルの相対パス |
 | `base_branch` | string | No | `main` | PR のマージ先ベースブランチ |
 | `branch_prefix` | string | No | `release/` | 作成するリリースブランチの接頭辞 |
@@ -156,9 +156,16 @@ jobs:
   ```yaml
   bump_strategy: "npm"
   ```
-- **Python (Poetry)**:
+- **Rust**:
   ```yaml
-  bump_strategy: "poetry"
+  bump_strategy: "rust"
+  # Cargo.toml 以外のファイルパスを更新する場合のみ指定（省略時は Cargo.toml）
+  # version_file: "crates/app/Cargo.toml"
+  ```
+- **.NET / C#**:
+  ```yaml
+  bump_strategy: "dotnet"
+  version_file: "src/MyApp/MyApp.csproj"
   ```
 - **Go**:
   ```yaml
