@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Prevented command injection by replacing raw command execution with safe `bump_strategy` options and strict SemVer validation.
 
 ### Fixed
+- Configured required permissions (`checks: write`, `issues: write`, `pull-requests: write`) in `ci.yml` for `reviewdog/action-actionlint` reporter.
 - Resolved shellcheck SC2016 info warning in `reusable-prepare-release.yml` by using string concatenation in inline Node.js script.
 - Fixed `dotnet` bump strategy in `reusable-prepare-release.yml` to support multiline XML property elements and fail if zero replacements occur.
 - Added zero-replacement failure guards to `rust` and `go` bump strategies in `reusable-prepare-release.yml`.
