@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-09-26
+
 ### Added
 - GitHub App 鍵の Bitwarden / DPAPI バックアップ、ダウンロード PEM との復号照合、Organization Actions secrets 登録・ローテーション用 PowerShell スクリプトと手順を追加。
 - Added CI workflow (`.github/workflows/ci.yml`) with `actionlint` and `shellcheck` static analysis.
@@ -37,4 +39,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enforced `commit_message_prefix` check at the job level and pinned release checkout/target to trigger commit SHA in `reusable-publish-release.yml`.
 - Aligned Organization secret names in design document with workflow implementation (`RELEASE_BOT_APP_ID`, `RELEASE_BOT_PRIVATE_KEY`).
 
-[Unreleased]: https://github.com/scottlz0310/release-automate/commits/main
+[Unreleased]: https://github.com/scottlz0310/release-automate/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/scottlz0310/release-automate/releases/tag/v1.0.0
