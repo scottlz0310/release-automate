@@ -11,9 +11,6 @@ on:
 
 permissions:
   contents: read
-  checks: write
-  issues: write
-  pull-requests: write
 
 jobs:
   actionlint:
@@ -24,7 +21,6 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Run actionlint
-        uses: reviewdog/action-actionlint@2085657ab2c7f48c58edcc767fba576f63bea76b # v1.77.0
+        uses: docker://rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
         with:
-          fail_level: error
-          filter_mode: nofilter
+          args: -color
