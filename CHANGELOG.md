@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Bitwarden の GitHub App 秘密鍵を PEM ファイルまたは GitHub fingerprint と照合する PowerShell スクリプトを追加。鍵本文は表示・保存しません。
 - Added CI workflow (`.github/workflows/ci.yml`) with `actionlint` and `shellcheck` static analysis.
 - Added `rust` bump strategy in `reusable-prepare-release.yml` for updating package version in `Cargo.toml`.
 - Added `dotnet` bump strategy in `reusable-prepare-release.yml` for updating `<Version>`, `<PackageVersion>`, `<AssemblyVersion>`, `<FileVersion>`, and `<InformationalVersion>` in `.csproj` or `Directory.Build.props`.
