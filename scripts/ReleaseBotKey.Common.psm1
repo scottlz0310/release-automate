@@ -284,11 +284,16 @@ function Save-ReleaseBotBitwardenBackup {
         $existingNote = Get-ReleaseBotBitwardenNote -Id $item.Id
         $metadata = Get-ReleaseBotVaultMetadata -Note $existingNote
         $existingNote = $null
-        if ($metadata.AppId -cne $AppId -or $metadata.Fingerprint -cne $FingerprintValue) {
-            throw 'The existing Bitwarden backup does not match the requested App ID and fingerprint.'
+        # A legacy note holding the previous key must survive rotation, so only reuse it for the same key.
+        $isOtherLegacyKey = $item.Name -ceq $script:ReleaseBotLegacyItemName -and $metadata.Fingerprint -cne $FingerprintValue
+        if (-not $isOtherLegacyKey) {
+            if ($metadata.AppId -cne $AppId -or $metadata.Fingerprint -cne $FingerprintValue) {
+                throw 'The existing Bitwarden backup does not match the requested App ID and fingerprint.'
+            }
+            $metadata = $null
+            return "Bitwarden Secure Note ($($item.Name))"
         }
         $metadata = $null
-        return "Bitwarden Secure Note ($($item.Name))"
     }
 
     $note = Get-ReleaseBotVaultNote -Pem $Pem -AppId $AppId -FingerprintValue $FingerprintValue

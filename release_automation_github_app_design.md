@@ -69,7 +69,7 @@ $pem = "$env:USERPROFILE\Downloads\scottlz0310-release-bot.private-key.pem"
 pwsh ./scripts/backup-release-bot-key.ps1 -PemPath $pem -AppId 5074929
 ```
 
-* `bw` が PATH 上にある場合、Bitwarden をローカルプロンプトで解錠し、fingerprint ごとの Secure Note に保存します。既存の同一鍵は照合して再利用します。`bw` が存在しても解錠や保存に失敗した場合、別形式へ自動フォールバックせず停止します。
+* `bw` が PATH 上にある場合、Bitwarden をローカルプロンプトで解錠し、fingerprint ごとの Secure Note に保存します。既存の同一鍵は照合して再利用します。fingerprint を含まない旧形式名の Secure Note は同じ鍵の場合だけ再利用し、別の鍵を保持している場合は残したまま新しい項目を作成します。`bw` が存在しても解錠や保存に失敗した場合、別形式へ自動フォールバックせず停止します。
 * `bw` がない場合、`ConvertFrom-SecureString` の Windows DPAPI 保護を使って `%LOCALAPPDATA%\release-automate\release-bot-keys` に保存し、ファイルと保存先ディレクトリの ACL を現在の Windows ユーザーに限定します。ファイルは同じ Windows ユーザーのプロファイルからのみ復号できます。
 * PEM はバックアップ時には削除しません。出力された `SHA256:...` fingerprint と、DPAPI 保存時は表示されたバックアップファイルパスを控えます。
 
