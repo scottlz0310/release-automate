@@ -105,7 +105,13 @@ jobs:
                 exit 1
               fi
               echo "Updating Rust package version in $CARGO_FILE"
+              BEFORE_HASH=$(git hash-object "$CARGO_FILE")
               sed -i -E '0,/^version\s*=\s*"[^"]+"/s/^version\s*=\s*"[^"]+"/version = "'"${VERSION}"'"/' "$CARGO_FILE"
+              AFTER_HASH=$(git hash-object "$CARGO_FILE")
+              if [ "$BEFORE_HASH" = "$AFTER_HASH" ]; then
+                echo "::error::No package version found or replaced in $CARGO_FILE"
+                exit 1
+              fi
               ;;
             dotnet)
               if [ -z "$VERSION_FILE" ]; then
@@ -117,12 +123,37 @@ jobs:
                 exit 1
               fi
               echo "Updating .NET version in $VERSION_FILE"
-              BASE_VERSION="${VERSION%%-*}"
-              sed -i -E "s|(<Version>)[^<]+(</Version>)|\1${VERSION}\2|g" "$VERSION_FILE"
-              sed -i -E "s|(<PackageVersion>)[^<]+(</PackageVersion>)|\1${VERSION}\2|g" "$VERSION_FILE"
-              sed -i -E "s|(<AssemblyVersion>)[^<]+(</AssemblyVersion>)|\1${BASE_VERSION}.0\2|g" "$VERSION_FILE"
-              sed -i -E "s|(<FileVersion>)[^<]+(</FileVersion>)|\1${BASE_VERSION}.0\2|g" "$VERSION_FILE"
-              sed -i -E "s|(<InformationalVersion>)[^<]+(</InformationalVersion>)|\1${VERSION}\2|g" "$VERSION_FILE"
+              node -e '
+                const fs = require("fs");
+                const filePath = process.argv[1];
+                const version = process.argv[2];
+                const baseVersion = version.split("-")[0];
+
+                let content = fs.readFileSync(filePath, "utf8");
+                let count = 0;
+
+                const replaceTag = (tagName, val) => {
+                  const regex = new RegExp(`(<${tagName}\\b[^>]*>)[\\s\\S]*?(<\\/${tagName}>)`, "g");
+                  content = content.replace(regex, (match, open, close) => {
+                    count++;
+                    return `${open}${val}${close}`;
+                  });
+                };
+
+                replaceTag("Version", version);
+                replaceTag("PackageVersion", version);
+                replaceTag("AssemblyVersion", `${baseVersion}.0`);
+                replaceTag("FileVersion", `${baseVersion}.0`);
+                replaceTag("InformationalVersion", version);
+
+                if (count === 0) {
+                  console.error(`::error::No version tags (<Version>, <PackageVersion>, etc.) found or replaced in ${filePath}`);
+                  process.exit(1);
+                }
+
+                fs.writeFileSync(filePath, content, "utf8");
+                console.log(`Updated ${count} version property/properties in ${filePath}`);
+              ' "$VERSION_FILE" "$VERSION"
               ;;
             go)
               if [ -z "$VERSION_FILE" ]; then
@@ -134,7 +165,13 @@ jobs:
                 exit 1
               fi
               echo "Updating Go version file: $VERSION_FILE"
+              BEFORE_HASH=$(git hash-object "$VERSION_FILE")
               sed -i -E "s/([Vv]ersion\s*=\s*\")[^\"]+(\")/\1${VERSION}\2/g" "$VERSION_FILE"
+              AFTER_HASH=$(git hash-object "$VERSION_FILE")
+              if [ "$BEFORE_HASH" = "$AFTER_HASH" ]; then
+                echo "::error::No version definition found or replaced in $VERSION_FILE"
+                exit 1
+              fi
               ;;
             *)
               echo "::error::Unsupported bump_strategy: $STRATEGY. Supported strategies: none, npm, rust, dotnet, go"

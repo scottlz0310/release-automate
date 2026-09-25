@@ -27,6 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Prevented command injection by replacing raw command execution with safe `bump_strategy` options and strict SemVer validation.
 
 ### Fixed
+- Fixed `dotnet` bump strategy in `reusable-prepare-release.yml` to support multiline XML property elements and fail if zero replacements occur.
+- Added zero-replacement failure guards to `rust` and `go` bump strategies in `reusable-prepare-release.yml`.
 - Fixed release branch name evaluation in `reusable-prepare-release.yml` to dynamically use generated tag name.
 - Enforced `commit_message_prefix` check at the job level and pinned release checkout/target to trigger commit SHA in `reusable-publish-release.yml`.
 - Aligned Organization secret names in design document with workflow implementation (`RELEASE_BOT_APP_ID`, `RELEASE_BOT_PRIVATE_KEY`).
