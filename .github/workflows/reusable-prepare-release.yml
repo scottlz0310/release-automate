@@ -133,26 +133,26 @@ jobs:
                 let count = 0;
 
                 const replaceTag = (tagName, val) => {
-                  const regex = new RegExp(`(<${tagName}\\b[^>]*>)[\\s\\S]*?(<\\/${tagName}>)`, "g");
+                  const regex = new RegExp("(<" + tagName + "\\b[^>]*>)[\\s\\S]*?(<\\/" + tagName + ">)", "g");
                   content = content.replace(regex, (match, open, close) => {
                     count++;
-                    return `${open}${val}${close}`;
+                    return open + val + close;
                   });
                 };
 
                 replaceTag("Version", version);
                 replaceTag("PackageVersion", version);
-                replaceTag("AssemblyVersion", `${baseVersion}.0`);
-                replaceTag("FileVersion", `${baseVersion}.0`);
+                replaceTag("AssemblyVersion", baseVersion + ".0");
+                replaceTag("FileVersion", baseVersion + ".0");
                 replaceTag("InformationalVersion", version);
 
                 if (count === 0) {
-                  console.error(`::error::No version tags (<Version>, <PackageVersion>, etc.) found or replaced in ${filePath}`);
+                  console.error("::error::No version tags (<Version>, <PackageVersion>, etc.) found or replaced in " + filePath);
                   process.exit(1);
                 }
 
                 fs.writeFileSync(filePath, content, "utf8");
-                console.log(`Updated ${count} version property/properties in ${filePath}`);
+                console.log("Updated " + count + " version property/properties in " + filePath);
               ' "$VERSION_FILE" "$VERSION"
               ;;
             go)
