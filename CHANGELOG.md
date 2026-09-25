@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- GitHub App 鍵の Bitwarden / DPAPI バックアップ、ダウンロード PEM との復号照合、Organization Actions secrets 登録・ローテーション用 PowerShell スクリプトと手順を追加。
 - Added CI workflow (`.github/workflows/ci.yml`) with `actionlint` and `shellcheck` static analysis.
 - Added `rust` bump strategy in `reusable-prepare-release.yml` for updating package version in `Cargo.toml`.
 - Added `dotnet` bump strategy in `reusable-prepare-release.yml` for updating `<Version>`, `<PackageVersion>`, `<AssemblyVersion>`, `<FileVersion>`, and `<InformationalVersion>` in `.csproj` or `Directory.Build.props`.
