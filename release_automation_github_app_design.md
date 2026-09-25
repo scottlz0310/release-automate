@@ -5,6 +5,8 @@
 Organization (`scottlz0310`) 内の全リポジトリで共通利用できるよう、**Reusable Workflows (`workflow_call`)** として切り出し、各リポジトリ側は最小限の呼び出し定義（10〜15行程度）を配置するだけで利用可能にします。
 また、PR 起票時の CI 発火と属人化排除のため、**専用の GitHub App (Bot)** を認証基盤として採用し、Organization Secrets により各リポジトリへの一括配布を実現します。
 
+このリポジトリは Public caller からも利用するため Public を維持します。GitHub のアクセス規則では、Public caller は Private reusable workflow を利用できません。App の秘密鍵は Organization Actions secrets と Vault に保存し、このリポジトリには含めません（[GitHub Docs: reusable workflow access](https://docs.github.com/en/actions/reference/workflows-and-actions/reusing-workflow-configurations#access-to-reusable-workflows)）。
+
 ---
 
 ## 1. 全体アーキテクチャ
@@ -43,32 +45,78 @@ Organization (`scottlz0310`) 内の全リポジトリで共通利用できるよ
 
 ## 2. GitHub App の作成と Organization 設定
 
-Organization 単位で設定することで、リポジトリごとの個別シークレット登録を不要にします。
+鍵は GitHub App が発行した PEM を Bitwarden または DPAPI 暗号化ファイルに保管し、そのバックアップを検証してから Organization Actions secrets に登録します。秘密鍵を GitHub の Web フォームへ貼り付けず、スクリプトから `gh secret set` の標準入力へ渡します。
 
-### 2.1. GitHub App の作成手順
+### 2.1. GitHub App の作成
+
 1. GitHub の **Organization Settings (`https://github.com/organizations/scottlz0310/settings/apps`) → Developer settings → GitHub Apps → New GitHub App** を開きます。
-2. 以下の項目を設定します：
-   * **GitHub App name:** `scottlz0310-release-bot`（一意な名称）
-   * **Homepage URL:** 任意のリポジトリ URL（例: `https://github.com/scottlz0310/release-automate`）
-   * **Webhook:** **「Active」のチェックを外す**（イベント受信は不要）
-   * **Permissions (Repository permissions):**
-     * `Contents`: **Read and write**（ブランチ作成・ファイル push・タグ用）
-     * `Pull requests`: **Read and write**（PR 作成・更新用）
+2. 次を設定します。
+   * **GitHub App name:** `scottlz0310-release-bot`
+   * **Homepage URL:** `https://github.com/scottlz0310/release-automate`
+   * **Webhook:** **Active** を無効にする
+   * **Repository permissions:** `Contents: Read and write`、`Pull requests: Read and write`
    * **Where can this GitHub App be installed?:** `Only on this organization`
-3. **Create GitHub App** をクリックします。
-4. 作成後の画面から以下を取得・保存します：
-   * **App ID**: 画面上部の数値を控える。
-   * **Private key**: ページ下部の「Generate a private key」をクリックして `.pem` ファイルを保存。
+3. App を作成し、画面上部の **App ID** を控えます。
 
-### 2.2. アプリのインストール
-1. App 設定画面の左メニューから **Install App** を開きます。
-2. `scottlz0310` の **Install** をクリックします。
-3. **All repositories**（またはリリース自動化を適用したいリポジトリ）を選択して保存します。
+### 2.2. 秘密鍵の生成とバックアップ
 
-### 2.3. Organization Secrets の一括登録
-Organization の **Settings → Secrets and variables → Actions** に以下を登録し、`Repository access` を `All repositories` に設定します：
-* `RELEASE_BOT_APP_ID`: 控えた App ID（数値）
-* `RELEASE_BOT_PRIVATE_KEY`: `.pem` ファイルの中身をヘッダー・フッター・改行を含めすべて貼り付け
+GitHub App 設定の **Private keys → Generate a private key** から PEM をダウンロードし、同画面の fingerprint を控えます。GitHub は秘密鍵ではなく公開部分だけを保持するため、ダウンロード直後に以下のバックアップを行います。
+
+PowerShell 7.4 以降で、リポジトリのルートから実行します。
+
+```powershell
+$pem = "$env:USERPROFILE\Downloads\scottlz0310-release-bot.private-key.pem"
+pwsh ./scripts/backup-release-bot-key.ps1 -PemPath $pem -AppId 5074929
+```
+
+* `bw` が PATH 上にある場合、Bitwarden をローカルプロンプトで解錠し、fingerprint ごとの Secure Note に保存します。既存の同一鍵は照合して再利用します。`bw` が存在しても解錠や保存に失敗した場合、別形式へ自動フォールバックせず停止します。
+* `bw` がない場合、`ConvertFrom-SecureString` の Windows DPAPI 保護を使って `%LOCALAPPDATA%\release-automate\release-bot-keys` に保存し、ファイルと保存先ディレクトリの ACL を現在の Windows ユーザーに限定します。ファイルは同じ Windows ユーザーのプロファイルからのみ復号できます。
+* PEM はバックアップ時には削除しません。出力された `SHA256:...` fingerprint と、DPAPI 保存時は表示されたバックアップファイルパスを控えます。
+
+### 2.3. バックアップの復号・照合
+
+ダウンロードした PEM と GitHub 設定画面の fingerprint を指定して、保存した鍵を復号し、両方を照合します。
+
+```powershell
+pwsh ./scripts/verify-release-bot-key.ps1 `
+  -PemPath $pem `
+  -ExpectedFingerprint 'SHA256:<GitHub settings の fingerprint>'
+```
+
+Bitwarden バックアップは同じコマンドで照合できます。Bitwarden がない場合は、バックアップ時に表示された DPAPI ファイルを明示します。
+
+```powershell
+pwsh ./scripts/verify-release-bot-key.ps1 `
+  -PemPath $pem `
+  -ExpectedFingerprint 'SHA256:<GitHub settings の fingerprint>' `
+  -BackupPath "$env:LOCALAPPDATA\release-automate\release-bot-keys\<AppId>-<fingerprint>.dpapi.json"
+```
+
+照合が成功した後にのみ、スクリプトがダウンロード PEM の削除を `y/N` で尋ねます。`y` で指定ファイルだけを削除し、それ以外は保持します。ファイル削除は媒体上の安全な完全消去を保証するものではありません。
+
+### 2.4. App のインストールと Organization Actions secrets の初回登録
+
+バックアップ照合が成功した後、App 設定の **Install App** から Organization `scottlz0310` にインストールし、現在の運用では **All repositories** を選択します。その後、照合した fingerprint を使ってスクリプトを実行します。Bitwarden がない場合は DPAPI バックアップパスも指定します。
+
+```powershell
+pwsh ./scripts/set-release-bot-secrets.ps1 `
+  -Fingerprint 'SHA256:<backup が表示した fingerprint>'
+```
+
+スクリプトは実行前に確認を求め、`RELEASE_BOT_PRIVATE_KEY` と `RELEASE_BOT_APP_ID` を Organization `scottlz0310` の Actions secrets として全リポジトリ向けに作成または更新します。`gh auth status` に加え、更新後に名前と可視性が `all` であることを確認します。権限エラー時は `gh auth refresh -h github.com -s admin:org` で認証スコープを更新してください。
+
+### 2.5. 鍵ローテーション
+
+GitHub App は新旧複数の鍵を同時に保持できるため、次の順で停止時間を避けてローテーションします。
+
+1. App 設定で **Generate a private key** を実行し、新しい PEM をダウンロードします。旧鍵は削除しません。
+2. 新しい PEM に `backup-release-bot-key.ps1` を実行し、バックアップ先と fingerprint を記録します。
+3. `verify-release-bot-key.ps1 -PemPath ... -ExpectedFingerprint ...` を実行します。指定したダウンロードファイルと GitHub settings の fingerprint の照合成功後、表示される質問に `y` と答えると、そのファイルを削除できます。
+4. `rotate-release-bot-key.ps1 -Fingerprint ...` を実行し、確認プロンプトを承認します。DPAPI 保存なら `-BackupPath ...` も指定します。このスクリプトは `gh secret set` の upsert を使うため、同じ引数での再実行が可能です。
+5. 新しい Organization secret を使うワークフローを実行し、成功を確認します。GitHub は Actions secret の値を読み返せないため、名前・可視性確認と実ワークフロー実行で確認します。
+6. 新鍵での動作確認後に限り、GitHub App 設定画面で旧鍵を手動削除します。スクリプトは旧鍵を削除しません。
+
+GitHub の鍵ローテーション手順は[公式ドキュメント](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/managing-private-keys-for-github-apps)を参照してください。
 
 ---
 

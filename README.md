@@ -20,15 +20,26 @@ GitHub Organization (`scottlz0310`) 向けのリリース自動化 Reusable Work
 
 ---
 
-## セットアップ手順（初回のみ）
+## GitHub App のセットアップと鍵管理
 
-### 1. GitHub App の作成と Organization へのインストール
-1. `https://github.com/organizations/scottlz0310/settings/apps` で GitHub App を作成（詳細は [release_automation_github_app_design.md](release_automation_github_app_design.md) 参照）。
-   - 権限: `Contents: Read and write`, `Pull requests: Read and write`
-2. App を Organization (`scottlz0310`) の対象リポジトリにインストール。
-3. Organization Secrets (`https://github.com/organizations/scottlz0310/settings/secrets/actions`) に以下を一括登録：
-   - `RELEASE_BOT_APP_ID`: GitHub App ID
-   - `RELEASE_BOT_PRIVATE_KEY`: GitHub App の秘密鍵（PEM 形式）
+セットアップの全手順、初回登録、鍵ローテーションは [設計・運用手順書](release_automation_github_app_design.md) を参照してください。スクリプトは Windows の PowerShell 7.4 以降で実行します。
+
+1. GitHub App を作成します。
+2. GitHub App 設定画面から秘密鍵 PEM を生成・ダウンロードし、表示された GitHub fingerprint を控えます。
+3. `scripts/backup-release-bot-key.ps1` を実行します。`bw` があれば fingerprint ごとの Bitwarden Secure Note に保存し、`bw` がなければ DPAPI で暗号化したファイルを `%LOCALAPPDATA%` 配下に保存します。バックアップ後もダウンロードファイルは残ります。
+4. `scripts/verify-release-bot-key.ps1 -PemPath <ダウンロードした PEM> -ExpectedFingerprint <GitHub fingerprint>` でバックアップを復号し、PEM と GitHub fingerprint の両方を照合します。DPAPI 保存先を使う場合は、バックアップ時に表示されたパスを `-BackupPath` に指定してください。照合成功後、ダウンロードファイルを削除するか `y/N` で選べます。
+5. GitHub App を Organization `scottlz0310` の All repositories にインストールし、`scripts/set-release-bot-secrets.ps1 -Fingerprint <SHA256 fingerprint>` を実行します。確認プロンプトに同意すると、Actions secrets `RELEASE_BOT_PRIVATE_KEY` と `RELEASE_BOT_APP_ID` が全リポジトリ向けに作成または更新されます。Bitwarden がない環境では `-BackupPath <DPAPI バックアップ>` も指定します。
+
+```powershell
+$pem = "$env:USERPROFILE\Downloads\scottlz0310-release-bot.private-key.pem"
+pwsh ./scripts/backup-release-bot-key.ps1 -PemPath $pem -AppId 5074929
+pwsh ./scripts/verify-release-bot-key.ps1 -PemPath $pem -ExpectedFingerprint 'SHA256:<GitHub settings の fingerprint>'
+pwsh ./scripts/set-release-bot-secrets.ps1 -Fingerprint 'SHA256:<backup が表示した fingerprint>'
+```
+
+Bitwarden CLI がない場合は、バックアップ時に表示された DPAPI ファイルのパスを照合・登録コマンドの `-BackupPath` に指定します。DPAPI ファイルは作成した Windows ユーザーのプロファイルに依存し、別ユーザーや別 PC では復号できません。Bitwarden が利用可能なら Vault を主バックアップとして使ってください。
+
+鍵ローテーションでは、新鍵を生成して同じバックアップ・照合を行い、`scripts/rotate-release-bot-key.ps1` を実行します。新鍵でワークフローが成功するまで旧鍵は GitHub App 設定から削除しません。スクリプトは GitHub App の鍵自体を削除しません。
 
 ---
 

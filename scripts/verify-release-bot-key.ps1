@@ -1,210 +1,108 @@
 <#
 .SYNOPSIS
-Bitwarden に保存した GitHub App 秘密鍵を、PEM ファイルまたは GitHub fingerprint と照合します。
+保存した GitHub App 秘密鍵を、ダウンロード PEM または GitHub fingerprint と照合します。
 
 .DESCRIPTION
-Bitwarden Secure Note から鍵をメモリ上に読み込みます。秘密鍵の内容は表示・保存せず、GitHub の設定も変更しません。
-
-.PARAMETER PemPath
-照合対象の GitHub App PEM ファイル。
-
-.PARAMETER ExpectedFingerprint
-GitHub App 設定画面に表示される SHA256 fingerprint。
-
-.EXAMPLE
-./scripts/verify-release-bot-key.ps1 -PemPath "$env:USERPROFILE/Downloads/scottlz0310-release-bot.private-key.pem"
-
-.EXAMPLE
-./scripts/verify-release-bot-key.ps1 -ExpectedFingerprint 'SHA256:BASE64_FINGERPRINT='
+Bitwarden Secure Note または DPAPI ファイルから鍵をメモリ上で復号します。
+ダウンロード PEM を指定した場合は照合成功後に削除するか y/N で確認します。
+鍵本文は表示せず、GitHub の設定も変更しません。
 #>
 [CmdletBinding(DefaultParameterSetName = 'Fingerprint')]
 param(
-    [Parameter(Mandatory = $true, ParameterSetName = 'PemPath')]
+    [Parameter(Mandatory = $true, ParameterSetName = 'Pem')]
     [ValidateNotNullOrEmpty()]
     [string]$PemPath,
 
     [Parameter(Mandatory = $true, ParameterSetName = 'Fingerprint')]
+    [Parameter(ParameterSetName = 'Pem')]
     [ValidateNotNullOrEmpty()]
-    [string]$ExpectedFingerprint
+    [string]$ExpectedFingerprint,
+
+    [string]$BackupPath,
+
+    [ValidatePattern('^[0-9]+$')]
+    [string]$AppId = '5074929'
 )
 
 $ErrorActionPreference = 'Stop'
-$appName = 'scottlz0310-release-bot'
-$appId = '5074929'
-$itemName = 'scottlz0310-release-bot private key'
+Import-Module (Join-Path $PSScriptRoot 'ReleaseBotKey.Common.psm1') -Force
+Assert-ReleaseBotPlatform
+
+$sourcePem = $null
+$backup = $null
+$ownedSession = $false
 $stage = 'preflight'
-$failureInfo = $null
-$ownsSession = $false
-$originalSession = $env:BW_SESSION
-$sessionOutput = $null
-$itemsOutput = $null
-$vaultItems = $null
-$matchingItems = $null
-$noteOutput = $null
-$noteText = $null
-$pem = $null
-$candidatePem = $null
-$pemMatches = $null
-$candidateFingerprint = $null
-$expectedFingerprintValue = $null
-
-function Get-GitHubAppKeyFingerprint {
-    param([Parameter(Mandatory = $true)][string]$PrivatePem)
-
-    $rsa = [System.Security.Cryptography.RSA]::Create()
-    $publicDer = $null
-    $sha256 = $null
-    $digest = $null
-    try {
-        $rsa.ImportFromPem($PrivatePem)
-        $publicDer = $rsa.ExportSubjectPublicKeyInfo()
-        $sha256 = [System.Security.Cryptography.SHA256]::Create()
-        $digest = $sha256.ComputeHash($publicDer)
-        [Convert]::ToBase64String($digest)
-    }
-    finally {
-        if ($digest) {
-            [Array]::Clear($digest, 0, $digest.Length)
-        }
-        if ($publicDer) {
-            [Array]::Clear($publicDer, 0, $publicDer.Length)
-        }
-        if ($sha256) {
-            $sha256.Dispose()
-        }
-        $rsa.Dispose()
-    }
-}
-
 try {
-    if ($PSCmdlet.ParameterSetName -eq 'PemPath') {
-        $resolvedPath = Resolve-Path -LiteralPath $PemPath -ErrorAction Stop
-        if ($resolvedPath.Provider.Name -ne 'FileSystem' -or -not (Test-Path -LiteralPath $resolvedPath.ProviderPath -PathType Leaf)) {
-            throw 'The comparison PEM file was not found.'
+    $stage = 'read-source'
+    if ($PSCmdlet.ParameterSetName -eq 'Pem') {
+        $resolved = Resolve-Path -LiteralPath $PemPath -ErrorAction Stop
+        if ($resolved.Provider.Name -ne 'FileSystem') {
+            throw 'The comparison PEM must be a local file.'
         }
-        $candidatePem = [System.IO.File]::ReadAllText($resolvedPath.ProviderPath)
+        $sourceFile = Get-Item -LiteralPath $resolved.ProviderPath -Force -ErrorAction Stop
+        if ($sourceFile.PSIsContainer -or ($sourceFile.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+            throw 'The comparison PEM must be a regular file.'
+        }
+        $sourcePem = [IO.File]::ReadAllText($resolved.ProviderPath)
+        $sourceFingerprintValue = Get-ReleaseBotFingerprint -Pem $sourcePem
+        if (-not [string]::IsNullOrWhiteSpace($ExpectedFingerprint)) {
+            $expectedValue = ConvertTo-ReleaseBotFingerprintValue -Fingerprint $ExpectedFingerprint
+            if ($sourceFingerprintValue -cne $expectedValue) {
+                throw 'The downloaded PEM does not match the GitHub fingerprint.'
+            }
+        }
+        $fingerprintValue = $sourceFingerprintValue
     }
     else {
-        $expectedFingerprintValue = $ExpectedFingerprint.Trim()
-        if ($expectedFingerprintValue.StartsWith('SHA256:', [StringComparison]::Ordinal)) {
-            $expectedFingerprintValue = $expectedFingerprintValue.Substring(7)
-        }
-        if ($expectedFingerprintValue -cnotmatch '^[A-Za-z0-9+/]{43}=$') {
-            throw 'The expected GitHub fingerprint has an invalid format.'
-        }
+        $fingerprintValue = ConvertTo-ReleaseBotFingerprintValue -Fingerprint $ExpectedFingerprint
     }
 
-    if (-not (Get-Command bw -ErrorAction SilentlyContinue)) {
-        throw 'Bitwarden CLI (bw) is not available.'
+    if ([string]::IsNullOrWhiteSpace($BackupPath) -and (Get-ReleaseBotExecutable -Name 'bw')) {
+        $stage = 'unlock-vault'
+        $null = Get-ReleaseBotBitwarden
+        $ownedSession = $true
+    }
+    $stage = 'read-backup'
+    $backup = Get-ReleaseBotBackup -FingerprintValue $fingerprintValue -AppId $AppId -BackupPath $BackupPath
+    if ($backup.Fingerprint -cne $fingerprintValue) {
+        throw 'The backup fingerprint does not match the requested GitHub App key.'
     }
 
-    $stage = 'unlock'
-    if ([string]::IsNullOrWhiteSpace($originalSession)) {
-        Write-Host 'このウィンドウで Bitwarden を解錠してください。マスターパスワードはローカルのプロンプトにだけ入力されます。'
-        $sessionOutput = & bw unlock --raw
-        $bwExitCode = $LASTEXITCODE
-        if ($bwExitCode -ne 0 -or [string]::IsNullOrWhiteSpace(($sessionOutput -join ''))) {
-            throw 'Bitwarden unlock did not complete.'
+    if ($PSCmdlet.ParameterSetName -eq 'Pem') {
+        $stage = 'compare'
+        if ($backup.Pem -cne $sourcePem) {
+            throw 'The saved backup does not match the supplied download file.'
         }
-        $env:BW_SESSION = ($sessionOutput -join '').Trim()
-        $ownsSession = $true
-        $sessionOutput = $null
+        Write-Host "バックアップの復号とダウンロード PEM の照合に成功しました: $(Format-ReleaseBotFingerprint -Value $fingerprintValue)"
+        $stage = 'delete-prompt'
+        $answer = Read-Host "照合済みのダウンロードファイルを削除しますか？ y/N ($($resolved.ProviderPath))"
+        if ($answer -ieq 'y') {
+            $stage = 'delete-download'
+            Remove-Item -LiteralPath $resolved.ProviderPath -Force -ErrorAction Stop
+            Write-Host 'ダウンロード PEM を削除しました。バックアップは保持されています。'
+        }
+        else {
+            Write-Host 'ダウンロード PEM は保持しました。'
+        }
     }
     else {
-        $statusOutput = & bw status 2>$null
-        $bwExitCode = $LASTEXITCODE
-        if ($bwExitCode -ne 0) {
-            throw 'Bitwarden status could not be read.'
-        }
-        $status = (($statusOutput -join '') | ConvertFrom-Json -ErrorAction Stop).status
-        $statusOutput = $null
-        if ($status -ne 'unlocked') {
-            throw 'The supplied Bitwarden session is not unlocked.'
-        }
+        Write-Host "保存したバックアップを復号し、fingerprint を確認しました: $(Format-ReleaseBotFingerprint -Value $fingerprintValue)"
     }
-
-    $stage = 'vault-search'
-    $itemsOutput = & bw list items --search $itemName 2>$null
-    $bwExitCode = $LASTEXITCODE
-    if ($bwExitCode -ne 0) {
-        throw 'Bitwarden Secure Notes could not be searched.'
-    }
-    $itemsJson = $itemsOutput -join "`n"
-    if ([string]::IsNullOrWhiteSpace($itemsJson)) {
-        throw 'The target Bitwarden Secure Note was not found.'
-    }
-    $vaultItems = @(ConvertFrom-Json -InputObject $itemsJson -ErrorAction Stop)
-    $matchingItems = @($vaultItems | Where-Object { $_.name -ceq $itemName })
-    if ($matchingItems.Count -ne 1 -or $matchingItems[0].type -ne 2 -or -not $matchingItems[0].id) {
-        throw 'Exactly one target Bitwarden Secure Note is required.'
-    }
-
-    $stage = 'vault-read'
-    $noteOutput = & bw get notes $matchingItems[0].id 2>$null
-    $bwExitCode = $LASTEXITCODE
-    if ($bwExitCode -ne 0) {
-        throw 'The Bitwarden Secure Note could not be read.'
-    }
-    $noteText = $noteOutput -join "`n"
-    $noteOutput = $null
-    if (-not $noteText.Contains("GitHub App: $appName") -or -not $noteText.Contains("App ID: $appId")) {
-        throw 'The Secure Note does not describe the expected GitHub App.'
-    }
-
-    $stage = 'key-extract'
-    $pemMatches = [regex]::Matches($noteText, '(?ms)^-----BEGIN (?<kind>[A-Z0-9 ]*PRIVATE KEY)-----\r?\n.+?\r?\n-----END \k<kind>-----')
-    if ($pemMatches.Count -ne 1) {
-        throw 'Exactly one PEM private key is required in the Secure Note.'
-    }
-    $pem = $pemMatches[0].Value.Trim()
-    $noteText = $null
-    $vaultItems = $null
-    $matchingItems = $null
-    $itemsOutput = $null
-    $itemsJson = $null
-
-    $stage = 'compare'
-    $vaultFingerprint = Get-GitHubAppKeyFingerprint -PrivatePem $pem
-    if ($PSCmdlet.ParameterSetName -eq 'PemPath') {
-        $candidateFingerprint = Get-GitHubAppKeyFingerprint -PrivatePem $candidatePem
-        if (-not [String]::Equals($vaultFingerprint, $candidateFingerprint, [StringComparison]::Ordinal)) {
-            throw 'The Bitwarden key does not match the supplied PEM file.'
-        }
-        Write-Host 'Bitwarden の鍵と指定 PEM ファイルは一致しました。'
-    }
-    elseif (-not [String]::Equals($vaultFingerprint, $expectedFingerprintValue, [StringComparison]::Ordinal)) {
-        throw 'The Bitwarden key does not match the supplied GitHub fingerprint.'
-    }
-    else {
-        Write-Host 'Bitwarden の鍵 fingerprint と指定した GitHub fingerprint は一致しました。'
+    Write-Host "バックアップ: $($backup.Storage)"
+    if ($backup.Path) {
+        Write-Host "バックアップファイル: $($backup.Path)"
     }
 }
 catch {
-    $failureInfo = "$stage ($($_.Exception.GetType().Name))"
+    throw "GitHub App 鍵の照合は $stage ($($_.Exception.GetType().Name)) で停止しました: $($_.Exception.Message) 鍵の内容は表示していません。"
 }
 finally {
-    $pem = $null
-    $candidatePem = $null
-    $noteText = $null
-    $noteOutput = $null
-    $pemMatches = $null
-    $itemsJson = $null
-    $itemsOutput = $null
-    $vaultItems = $null
-    $matchingItems = $null
-    $sessionOutput = $null
-    $candidateFingerprint = $null
-    $expectedFingerprintValue = $null
-    if ($ownsSession -and $env:BW_SESSION) {
-        & bw lock 2>$null | Out-Null
-        $lockExitCode = $LASTEXITCODE
-        Remove-Item Env:BW_SESSION -ErrorAction SilentlyContinue
-        if ($lockExitCode -ne 0 -and -not $failureInfo) {
-            $failureInfo = 'vault-lock (NativeCommandError)'
-        }
+    if ($backup) {
+        $backup.Pem = $null
     }
-}
-
-if ($failureInfo) {
-    throw "照合は $failureInfo で停止しました。鍵の内容は表示・保存していません。"
+    $backup = $null
+    $sourcePem = $null
+    if ($ownedSession) {
+        Close-ReleaseBotBitwarden
+    }
 }
