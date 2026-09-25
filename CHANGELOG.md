@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Added CI workflow (`.github/workflows/ci.yml`) with `actionlint` and `shellcheck` static analysis.
 - Added `rust` bump strategy in `reusable-prepare-release.yml` for updating package version in `Cargo.toml`.
 - Added `dotnet` bump strategy in `reusable-prepare-release.yml` for updating `<Version>`, `<PackageVersion>`, `<AssemblyVersion>`, `<FileVersion>`, and `<InformationalVersion>` in `.csproj` or `Directory.Build.props`.
 - Reusable Workflow: `reusable-prepare-release.yml` for automating release PR preparation using GitHub App token.
@@ -27,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Prevented command injection by replacing raw command execution with safe `bump_strategy` options and strict SemVer validation.
 
 ### Fixed
+- Switched `ci.yml` to `docker://rhysd/actionlint` with digest pinning and `contents: read` permission, ensuring static analysis and annotations function in public fork PRs without write permissions.
+- Resolved shellcheck SC2016 info warning in `reusable-prepare-release.yml` by using string concatenation in inline Node.js script.
 - Fixed `dotnet` bump strategy in `reusable-prepare-release.yml` to support multiline XML property elements and fail if zero replacements occur.
 - Added zero-replacement failure guards to `rust` and `go` bump strategies in `reusable-prepare-release.yml`.
 - Fixed release branch name evaluation in `reusable-prepare-release.yml` to dynamically use generated tag name.
