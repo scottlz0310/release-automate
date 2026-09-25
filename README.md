@@ -11,7 +11,7 @@ GitHub Organization (`scottlz0310`) 向けのリリース自動化 Reusable Work
 1. [`.github/workflows/reusable-prepare-release.yml`](.github/workflows/reusable-prepare-release.yml)
    - 手動トリガー (`workflow_dispatch`) を受け、GitHub App 名義でリリース準備 PR を自動起票。
    - `target_version` の正規表現バリデーション（SemVer 検証、コマンドインジェクション防止）。
-   - 事前定義された安全な `bump_strategy`（`npm`, `poetry`, `go`, `none`）によるバージョン定義ファイル更新。
+   - 事前定義された安全な `bump_strategy`（`npm`, `rust`, `dotnet`, `go`, `none`）によるバージョン定義ファイル更新。
    - `CHANGELOG.md` の `[Unreleased]` 確定および比較リンク更新。
    - サードパーティ Actions を完全なコミット SHA にピン留め。
 2. [`.github/workflows/reusable-publish-release.yml`](.github/workflows/reusable-publish-release.yml)
@@ -55,7 +55,7 @@ jobs:
     secrets: inherit
     with:
       target_version: ${{ inputs.target_version }}
-      # 言語に応じた bump_strategy を指定 (npm, poetry, go, none)
+      # 言語に応じた bump_strategy を指定 (npm, rust, dotnet, go, none)
       bump_strategy: "npm"
 ```
 
