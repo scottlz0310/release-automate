@@ -11,3 +11,4 @@ desktop.ini
 .env
 .env.*
 !.env.example
+coverage.xml

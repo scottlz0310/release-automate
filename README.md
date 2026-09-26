@@ -41,6 +41,18 @@ Bitwarden CLI がない場合は、バックアップ時に表示された DPAPI
 
 鍵ローテーションでは、新鍵を生成して同じバックアップ・照合を行い、`scripts/rotate-release-bot-key.ps1` を実行します。新鍵でワークフローが成功するまで旧鍵は GitHub App 設定から削除しません。スクリプトは GitHub App の鍵自体を削除しません。
 
+### 鍵管理スクリプトのテスト
+
+Windows の PowerShell 7.4 以降で Pester 6.2.0 を使います。テストでは一時的に生成した鍵と模擬 CLI を使い、実際の Bitwarden Vault と GitHub Secrets には接続しません。
+
+```powershell
+Install-Module Pester -RequiredVersion 6.2.0 -Scope CurrentUser -Force
+Import-Module Pester -RequiredVersion 6.2.0
+Invoke-Pester -Path ./tests
+```
+
+PR と `main` の CI は Windows 上で JaCoCo カバレッジを生成し、OIDC 認証で Codecov に送信します。Codecov 側でこのリポジトリを有効にすると、PR のカバレッジを確認できます。
+
 ---
 
 ## 各リポジトリでの利用方法

@@ -284,11 +284,14 @@ function Save-ReleaseBotBitwardenBackup {
         $existingNote = Get-ReleaseBotBitwardenNote -Id $item.Id
         $metadata = Get-ReleaseBotVaultMetadata -Note $existingNote
         $existingNote = $null
+        if ($metadata.AppId -cne $AppId) {
+            throw 'The existing Bitwarden backup does not match the requested App ID.'
+        }
         # A legacy note holding the previous key must survive rotation, so only reuse it for the same key.
         $isOtherLegacyKey = $item.Name -ceq $script:ReleaseBotLegacyItemName -and $metadata.Fingerprint -cne $FingerprintValue
         if (-not $isOtherLegacyKey) {
-            if ($metadata.AppId -cne $AppId -or $metadata.Fingerprint -cne $FingerprintValue) {
-                throw 'The existing Bitwarden backup does not match the requested App ID and fingerprint.'
+            if ($metadata.Fingerprint -cne $FingerprintValue) {
+                throw 'The existing Bitwarden backup does not match the requested fingerprint.'
             }
             $metadata = $null
             return "Bitwarden Secure Note ($($item.Name))"
@@ -339,7 +342,8 @@ function Set-ReleaseBotDirectoryAcl {
     param([Parameter(Mandatory = $true)][string]$Path)
 
     $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
-    $acl = Get-Acl -LiteralPath $Path -ErrorAction Stop
+    $directory = [IO.DirectoryInfo]::new($Path)
+    $acl = [IO.FileSystemAclExtensions]::GetAccessControl($directory, [Security.AccessControl.AccessControlSections]::Access)
     $acl.SetAccessRuleProtection($true, $false)
     foreach ($existingRule in @($acl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier]))) {
         $acl.RemoveAccessRuleAll($existingRule)
@@ -352,14 +356,15 @@ function Set-ReleaseBotDirectoryAcl {
         [System.Security.AccessControl.AccessControlType]::Allow
     )
     [void]$acl.AddAccessRule($rule)
-    Set-Acl -LiteralPath $Path -AclObject $acl -ErrorAction Stop
+    [IO.FileSystemAclExtensions]::SetAccessControl($directory, $acl)
 }
 
 function Set-ReleaseBotFileAcl {
     param([Parameter(Mandatory = $true)][string]$Path)
 
     $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
-    $acl = Get-Acl -LiteralPath $Path -ErrorAction Stop
+    $file = [IO.FileInfo]::new($Path)
+    $acl = [IO.FileSystemAclExtensions]::GetAccessControl($file, [Security.AccessControl.AccessControlSections]::Access)
     $acl.SetAccessRuleProtection($true, $false)
     foreach ($existingRule in @($acl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier]))) {
         $acl.RemoveAccessRuleAll($existingRule)
@@ -370,7 +375,7 @@ function Set-ReleaseBotFileAcl {
         [System.Security.AccessControl.AccessControlType]::Allow
     )
     [void]$acl.AddAccessRule($rule)
-    Set-Acl -LiteralPath $Path -AclObject $acl -ErrorAction Stop
+    [IO.FileSystemAclExtensions]::SetAccessControl($file, $acl)
 }
 
 function Protect-ReleaseBotPem {

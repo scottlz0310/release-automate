@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- GitHub App 鍵管理スクリプトの Pester 6.2.0 テスト、Windows CI、Codecov カバレッジ送信を追加。
+
+### Changed
+- Pester の固定バージョンを共有 Renovate プリセットで追跡。
+
+### Fixed
+- DPAPI バックアップの ACL 設定が標準ユーザーで権限エラーになる問題、旧形式 Secure Note の App ID 不一致、secret 設定後の fingerprint 表示が二重接頭辞になる問題を修正。
+
 ## [1.0.0] - 2026-09-26
 
 ### Added

@@ -24,3 +24,40 @@ jobs:
         uses: docker://rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
         with:
           args: -color
+
+  pester:
+    name: Test key management (Pester)
+    runs-on: windows-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Pester
+        shell: pwsh
+        run: |
+          # renovate: datasource=nuget registryUrl=https://www.powershellgallery.com/api/v2 depName=Pester
+          Install-Module Pester -RequiredVersion 6.2.0 -Force -Scope CurrentUser
+
+      - name: Run Pester with coverage
+        shell: pwsh
+        run: |
+          Import-Module Pester -ErrorAction Stop
+          $config = New-PesterConfiguration
+          $config.Run.Path = './tests'
+          $config.Run.Exit = $true
+          $config.CodeCoverage.Enabled = $true
+          $config.CodeCoverage.Path = './scripts'
+          $config.CodeCoverage.OutputFormat = 'JaCoCo'
+          $config.CodeCoverage.OutputPath = 'coverage.xml'
+          Invoke-Pester -Configuration $config
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        with:
+          files: coverage.xml
+          disable_search: true
+          fail_ci_if_error: true
+          use_oidc: true
