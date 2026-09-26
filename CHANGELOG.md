@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - GitHub App 鍵管理スクリプトの Pester 6.2.0 テスト、Windows CI、Codecov カバレッジ送信を追加。
+- リリースコミットに固定した draft Release、同一 SHA の再実行、成果物検証後に公開する reusable workflow とモック検証を追加。
 
 ### Changed
 - Pester の固定バージョンを共有 Renovate プリセットで追跡。

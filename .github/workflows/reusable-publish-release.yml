@@ -13,13 +13,35 @@ on:
         required: false
         type: string
         default: 'CHANGELOG.md'
+      draft:
+        description: 'Create a draft release for artifact verification before publishing'
+        required: false
+        type: boolean
+        default: false
+    outputs:
+      tag_name:
+        description: 'Release tag'
+        value: ${{ jobs.publish.outputs.tag_name }}
+      target_sha:
+        description: 'Commit targeted by the release tag'
+        value: ${{ jobs.publish.outputs.target_sha }}
+      release_state:
+        description: 'draft or published; empty when the release job is skipped'
+        value: ${{ jobs.publish.outputs.release_state }}
 
 jobs:
   publish:
     if: startsWith(github.event.head_commit.message, inputs.commit_message_prefix)
     runs-on: ubuntu-latest
+    concurrency:
+      group: release-${{ github.repository }}-${{ github.sha }}
+      cancel-in-progress: false
     permissions:
       contents: write
+    outputs:
+      tag_name: ${{ steps.release_info.outputs.tag_name }}
+      target_sha: ${{ github.sha }}
+      release_state: ${{ steps.create_release.outputs.release_state }}
     steps:
       - name: Checkout repository at trigger commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -67,13 +89,105 @@ jobs:
           fi
 
       - name: Create Git Tag and GitHub Release
+        id: create_release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.release_info.outputs.tag_name }}
           TARGET_SHA: ${{ github.sha }}
+          DRAFT: ${{ inputs.draft }}
         run: |
-          echo "Publishing release for tag: $TAG at commit SHA: $TARGET_SHA"
-          gh release create "$TAG" \
-            --title "$TAG" \
-            --notes-file RELEASE_NOTES.md \
-            --target "$TARGET_SHA"
+          set -euo pipefail
+
+          tag_ref="refs/tags/$TAG"
+          tag_json=$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$TAG" |
+            jq -c --arg ref "$tag_ref" '.[] | select(.ref == $ref)')
+          if [[ -z "$tag_json" ]]; then
+            orphaned_releases=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" |
+              jq -sc --arg tag "$TAG" '[.[][] | select(.tag_name == $tag)]')
+            if [[ $(jq 'length' <<< "$orphaned_releases") != 0 ]]; then
+              echo "::error::Release $TAG already exists without a tag"
+              exit 1
+            fi
+            gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" \
+              -f ref="$tag_ref" -f sha="$TARGET_SHA" >/dev/null
+          fi
+
+          verify_tag() {
+            local tag_json object_type object_sha tag_object
+            tag_json=$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$TAG" |
+              jq -c --arg ref "$tag_ref" '.[] | select(.ref == $ref)')
+            if [[ -z "$tag_json" ]]; then
+              echo "::error::Release tag $TAG was not found"
+              exit 1
+            fi
+            object_type=$(jq -r '.object.type' <<< "$tag_json")
+            object_sha=$(jq -r '.object.sha' <<< "$tag_json")
+            while [[ "$object_type" == tag ]]; do
+              tag_object=$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$object_sha")
+              object_type=$(jq -r '.object.type' <<< "$tag_object")
+              object_sha=$(jq -r '.object.sha' <<< "$tag_object")
+            done
+            if [[ "$object_type" != commit || "$object_sha" != "$TARGET_SHA" ]]; then
+              echo "::error::Release tag $TAG points to $object_sha, expected $TARGET_SHA"
+              exit 1
+            fi
+          }
+          verify_tag
+
+          releases=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" |
+            jq -sc --arg tag "$TAG" '[.[][] | select(.tag_name == $tag)]')
+          release_count=$(jq 'length' <<< "$releases")
+          if (( release_count > 1 )); then
+            echo "::error::Multiple Releases use tag $TAG"
+            exit 1
+          fi
+          if (( release_count == 1 )); then
+            release_json=$(jq -c '.[0]' <<< "$releases")
+            recorded_target=$(jq -r '.target_commitish // ""' <<< "$release_json")
+            if [[ "$recorded_target" =~ ^[0-9a-f]{40}$ && "$recorded_target" != "$TARGET_SHA" ]]; then
+              echo "::error::Release $TAG records a different target SHA: $recorded_target"
+              exit 1
+            fi
+            existing_draft=$(jq -r '.draft' <<< "$release_json")
+            if [[ "$existing_draft" == true ]]; then
+              if [[ "$DRAFT" != true ]]; then
+                echo "::error::Existing draft $TAG requires the finalize workflow"
+                exit 1
+              fi
+              release_state=draft
+            elif [[ "$existing_draft" == false ]]; then
+              release_state=published
+            else
+              echo "::error::Unexpected Release state for $TAG"
+              exit 1
+            fi
+          else
+            release_args=(--title "$TAG" --notes-file RELEASE_NOTES.md --target "$TARGET_SHA" --verify-tag)
+            if [[ "$DRAFT" == true ]]; then
+              release_args+=(--draft)
+              release_state=draft
+            else
+              release_state=published
+            fi
+            gh release create "$TAG" "${release_args[@]}" --repo "$GITHUB_REPOSITORY"
+          fi
+
+          confirmed_releases=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" |
+            jq -sc --arg tag "$TAG" '[.[][] | select(.tag_name == $tag)]')
+          if [[ $(jq 'length' <<< "$confirmed_releases") != 1 ]]; then
+            echo "::error::Expected exactly one Release for $TAG"
+            exit 1
+          fi
+          confirmed_release=$(jq -c '.[0]' <<< "$confirmed_releases")
+          confirmed_draft=$(jq -r '.draft' <<< "$confirmed_release")
+          expected_draft=false
+          if [[ "$release_state" == draft ]]; then
+            expected_draft=true
+          fi
+          if [[ $(jq -r '.tag_name' <<< "$confirmed_release") != "$TAG" ||
+                "$confirmed_draft" != "$expected_draft" ]]; then
+            echo "::error::Release $TAG did not reach the expected $release_state state"
+            exit 1
+          fi
+          verify_tag
+          echo "release_state=$release_state" >> "$GITHUB_OUTPUT"
