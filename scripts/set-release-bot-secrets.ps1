@@ -40,7 +40,7 @@ try {
     }
 
     $stage = 'github-secrets'
-    Set-ReleaseBotOrganizationSecrets -Pem $backup.Pem -AppId $AppId -Fingerprint (Format-ReleaseBotFingerprint -Value $fingerprintValue)
+    Set-ReleaseBotOrganizationSecrets -Pem $backup.Pem -AppId $AppId -Fingerprint $fingerprintValue
 }
 catch {
     throw "Organization Actions secrets の更新は $stage ($($_.Exception.GetType().Name)) で停止しました: $($_.Exception.Message) 鍵の内容は表示していません。"
