@@ -104,14 +104,69 @@ jobs:
                 echo "::error::Cargo file not found: $CARGO_FILE"
                 exit 1
               fi
-              echo "Updating Rust package version in $CARGO_FILE"
-              BEFORE_HASH=$(git hash-object "$CARGO_FILE")
-              sed -i -E '0,/^version\s*=\s*"[^"]+"/s/^version\s*=\s*"[^"]+"/version = "'"${VERSION}"'"/' "$CARGO_FILE"
-              AFTER_HASH=$(git hash-object "$CARGO_FILE")
-              if [ "$BEFORE_HASH" = "$AFTER_HASH" ]; then
-                echo "::error::No package version found or replaced in $CARGO_FILE"
-                exit 1
-              fi
+              python3 - "$CARGO_FILE" "$VERSION" <<'PY'
+          import copy
+          import pathlib
+          import re
+          import subprocess
+          import sys
+          import tomllib
+
+          manifest = pathlib.Path(sys.argv[1]).resolve()
+          target_version = sys.argv[2]
+          data = tomllib.loads(manifest.read_text(encoding="utf-8"))
+          package = data.get("package")
+          if not isinstance(package, dict) or not isinstance(package.get("version"), str):
+              sys.exit(f"::error::{manifest} needs a direct [package].version string")
+          name = package["name"]
+          old_version = package["version"]
+          if old_version == target_version:
+              sys.exit(f"::error::{name} already has version {target_version}")
+
+          workspace_manifest = pathlib.Path(subprocess.check_output(
+              ["cargo", "locate-project", "--workspace", "--message-format", "plain",
+               "--manifest-path", str(manifest)], text=True,
+          ).strip())
+          lock = workspace_manifest.with_name("Cargo.lock")
+          if not lock.is_file():
+              sys.exit(f"::error::Cargo.lock not found: {lock}")
+          for path in (lock, manifest):
+              if subprocess.run(["git", "ls-files", "--error-unmatch", "--", str(path)],
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode:
+                  sys.exit(f"::error::{path.name} must be tracked by Git: {path}")
+          before = tomllib.loads(lock.read_text(encoding="utf-8"))
+          local_packages = [entry for entry in before.get("package", [])
+                            if entry["name"] == name and "source" not in entry]
+          if len(local_packages) != 1 or local_packages[0]["version"] != old_version:
+              sys.exit(f"::error::{lock} does not match {name} {old_version}")
+
+          lines = manifest.read_text(encoding="utf-8").splitlines(keepends=True)
+          in_package = False
+          replaced = 0
+          version_line = re.compile(r'^([ \t]*version[ \t]*=[ \t]*)(["\'])([^"\']+)\2([ \t]*(?:#.*)?)(\r?\n?)$')
+          for index, line in enumerate(lines):
+              if re.match(r"^[ \t]*\[", line):
+                  in_package = bool(re.match(r"^[ \t]*\[package\][ \t]*(?:#.*)?$", line.rstrip("\r\n")))
+              elif in_package and (match := version_line.match(line)):
+                  lines[index] = f"{match[1]}{match[2]}{target_version}{match[2]}{match[4]}{match[5]}"
+                  replaced += 1
+          if replaced != 1:
+              sys.exit(f"::error::Could not replace one direct [package].version in {manifest}")
+          manifest.write_text("".join(lines), encoding="utf-8")
+
+          subprocess.run(["cargo", "metadata", "--format-version", "1",
+                          "--manifest-path", str(manifest)], stdout=subprocess.DEVNULL, check=True)
+          after = tomllib.loads(lock.read_text(encoding="utf-8"))
+          expected = copy.deepcopy(before)
+          expected_entry = next(entry for entry in expected["package"]
+                                if entry["name"] == name and "source" not in entry)
+          expected_entry["version"] = target_version
+          if after != expected:
+              sys.exit(f"::error::{lock} changed beyond {name} version; inspect dependency resolution")
+          subprocess.run(["cargo", "metadata", "--locked", "--format-version", "1",
+                          "--manifest-path", str(manifest)], stdout=subprocess.DEVNULL, check=True)
+          print(f"Updated {name} {old_version} -> {target_version} in {manifest} and {lock}")
+          PY
               ;;
             dotnet)
               if [ -z "$VERSION_FILE" ]; then

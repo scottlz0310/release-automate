@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pester の固定バージョンを共有 Renovate プリセットで追跡。
 
 ### Fixed
+- Rust のリリース準備で workspace の `Cargo.lock` を package version と同期し、`--locked` で検証するよう修正。
 - DPAPI バックアップの ACL 設定が標準ユーザーで権限エラーになる問題、旧形式 Secure Note の App ID 不一致、secret 設定後の fingerprint 表示が二重接頭辞になる問題を修正。
 
 ## [1.0.0] - 2026-09-26
