@@ -2,7 +2,7 @@
 
 GitHub Organization (`scottlz0310`) 向けのリリース自動化 Reusable Workflows 集です。
 
-`main` ブランチの直接 push 禁止環境において、手動バージョン指定によるリリース準備 PR 起票と、PR マージ後のタグ打ち・GitHub Release 公開を安全に自動化します。
+`main` ブランチの直接 push 禁止環境において、手動バージョン指定によるリリース準備 PR 起票と、PR マージ後のタグ打ち・GitHub Release 公開を安全に自動化します。成果物の検証が必要なリポジトリでは draft 作成と公開を分けられます。
 
 ---
 
@@ -16,7 +16,10 @@ GitHub Organization (`scottlz0310`) 向けのリリース自動化 Reusable Work
    - サードパーティ Actions を完全なコミット SHA にピン留め。
 2. [`.github/workflows/reusable-publish-release.yml`](.github/workflows/reusable-publish-release.yml)
    - `main` への Squash merge コミットをジョブレベルで検知・強制。
-   - リリースコミット SHA (`github.sha`) をピン留めして Git タグ作成および GitHub Release 公開（CHANGELOG からリリースノート自動抽出）。
+   - リリースコミット SHA (`github.sha`) をピン留めして Git タグと GitHub Release を作成（CHANGELOG からリリースノート自動抽出）。`draft` の既定値は `false` で、従来どおり即時公開。
+   - `draft: true` は draft を作成し、`tag_name` / `target_sha` / `release_state` を出力。
+3. [`.github/workflows/reusable-finalize-release.yml`](.github/workflows/reusable-finalize-release.yml)
+   - 同じ workflow run の SHA、タグが指すコミット、draft 状態を再確認して公開。公開済みの同一 SHA なら変更せず成功。
 
 ---
 
@@ -57,7 +60,7 @@ PR と `main` の CI は Windows 上で JaCoCo カバレッジを生成し、OID
 
 ## 各リポジトリでの利用方法
 
-各リポジトリの `.github/workflows/` に以下の 2 つの YAML を配置します。
+各リポジトリの `.github/workflows/` に prepare と publish の caller を配置します。成果物の添付・検証を挟む場合は、publish caller に後述のジョブを追加します。
 
 ### 1. `.github/workflows/prepare-release.yml`
 
@@ -100,3 +103,63 @@ jobs:
     with:
       commit_message_prefix: "chore(release):"
 ```
+
+### draft 作成後に成果物を検証して公開する場合
+
+以下の `build-and-upload-release-assets.sh` と `verify-release-assets.sh` は利用側が実装するスクリプトの例です。前者は draft Release に成果物を添付し、後者は Release から成果物を再取得して必要な名前・種類・checksum・内容を検証します。後者が失敗すると `finalize` は実行されません。
+
+```yaml
+name: Publish Release After Verification
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  draft:
+    uses: scottlz0310/release-automate/.github/workflows/reusable-publish-release.yml@<固定コミットSHA>
+    permissions:
+      contents: write
+    with:
+      draft: true
+
+  attach:
+    needs: draft
+    if: needs.draft.outputs.release_state == 'draft'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@<固定コミットSHA>
+      - env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.draft.outputs.tag_name }}
+        run: ./scripts/build-and-upload-release-assets.sh "$TAG"
+
+  verify:
+    needs: [draft, attach]
+    if: needs.draft.outputs.release_state == 'draft'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@<固定コミットSHA>
+      - env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.draft.outputs.tag_name }}
+        run: ./scripts/verify-release-assets.sh "$TAG"
+
+  finalize:
+    needs: [draft, verify]
+    if: needs.draft.outputs.release_state == 'draft' && needs.verify.result == 'success'
+    uses: scottlz0310/release-automate/.github/workflows/reusable-finalize-release.yml@<固定コミットSHA>
+    permissions:
+      contents: write
+    with:
+      tag_name: ${{ needs.draft.outputs.tag_name }}
+      target_sha: ${{ needs.draft.outputs.target_sha }}
+```
+
+`<固定コミットSHA>` はこの 2 つの reusable workflow を含む `release-automate` の同一コミット、および利用側で採用する checkout のコミットに置き換えます。現行の `@v1` は新しい finalize workflow を含まないため、そのままでは段階的公開に使えません。タグは `GITHUB_TOKEN` で作るため、タグ push を起点とする別 workflow に依存せず、この caller の `needs` で接続してください。
+
+再実行では、同じ SHA の draft は再利用されます。添付ジョブは既存 asset を確認して重複添付を避け、検証ジョブは毎回 Release 上の asset を確認してください。公開失敗後は同じ run を再実行できます。異なる SHA の既存タグは失敗し、公開済み Release は再実行でも変更されません。`release_state` が `published` の再実行では添付・検証・公開ジョブをスキップします。

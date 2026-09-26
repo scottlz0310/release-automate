@@ -25,6 +25,19 @@ jobs:
         with:
           args: -color
 
+  release-workflows:
+    name: Test release workflow states
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Run mocked release scenarios
+        run: bash tests/release-workflows.sh
+
+      - name: Check scenario shell script
+        run: shellcheck tests/release-workflows.sh
+
   pester:
     name: Test key management (Pester)
     runs-on: windows-latest

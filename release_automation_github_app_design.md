@@ -38,7 +38,10 @@ Organization (`scottlz0310`) 内の全リポジトリで共通利用できるよ
                                                   ├─ トリガーコミット (${{ github.sha }}) をチェックアウト
                                                   ├─ マージコミットからバージョン / CHANGELOG 抽出
                                                   ├─ git タグ発行 (vX.Y.Z @ ${{ github.sha }})
-                                                  └─ GitHub Release 作成 (Release Notes 添付) & 公開
+                                                  └─ GitHub Release 作成 (既定は即時公開、draft 指定も可能)
+      │
+      └─ draft 指定時: 同一 caller の成果物添付 → 再取得・検証 →
+         [.github/workflows/reusable-finalize-release.yml] で公開
 ```
 
 ---
@@ -158,6 +161,9 @@ GitHub の鍵ローテーション手順は[公式ドキュメント](https://do
 | :--- | :--- | :--- | :--- | :--- |
 | `commit_message_prefix` | string | No | `chore(release):` | リリースマージコミットを検知するための接頭辞 |
 | `changelog_path` | string | No | `CHANGELOG.md` | リリースノート抽出対象の CHANGELOG パス |
+| `draft` | boolean | No | `false` | `true` なら draft 作成のみ行い、成果物検証後に finalize を呼ぶ |
+
+出力は `tag_name`、`target_sha`、`release_state`（`draft` または `published`）。リリースコミット以外でジョブがスキップされた場合は空になります。
 
 #### 必要な権限 (`permissions`)
 * `contents: write`（タグのプッシュおよび GitHub Release の作成）
@@ -167,7 +173,17 @@ GitHub の鍵ローテーション手順は[公式ドキュメント](https://do
 2. トリガーイベントの正確なコミット SHA (`${{ github.sha }}`) をチェックアウト（可変ブランチへの依存を排除）。
 3. コミットメッセージからタグ名（`vX.Y.Z`）を抽出。
 4. `changelog_path` から該当バージョンの変更履歴本文（Markdown）を抽出。
-5. `gh release create` を実行し、該当コミット SHA に対して Git タグ作成と Release Notes 添付・公開を同時に完了。
+5. タグ参照をコミット SHA に固定し、既存タグの解決先も確認する。同じ SHA の既存 Release は再利用し、異なる SHA は失敗する。
+6. `gh release create --verify-tag` で Release Notes を付けて作成する。既定では公開し、`draft: true` では draft のまま残す。公開済み Release は再実行で変更しない。
+
+### 3.3. draft Release の公開 (`reusable-finalize-release.yml`)
+
+| 入力 | 型 | 説明 |
+| :--- | :--- | :--- |
+| `tag_name` | string | publish workflow の同名出力 |
+| `target_sha` | string | publish workflow の同名出力 |
+
+`contents: write` を持つ finalize job は、同じ caller run の `github.sha`、タグの解決先 SHA、Release の draft 状態を確認して公開する。公開に成功したが後続確認に失敗した場合も、同じ run の再実行では公開済み状態を無変更で確認できる。利用側は成果物を Release から再取得・検証する job を置き、その成功を `needs` で finalize の前提にする。タグ push イベントから別 workflow を起動しない。caller の具体例は [README](README.md#draft-作成後に成果物を検証して公開する場合) を参照。
 
 ---
 

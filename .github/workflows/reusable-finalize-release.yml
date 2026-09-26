@@ -1,0 +1,107 @@
+name: Reusable Finalize Release
+
+on:
+  workflow_call:
+    inputs:
+      tag_name:
+        description: 'Tag returned by reusable-publish-release.yml'
+        required: true
+        type: string
+      target_sha:
+        description: 'Commit SHA returned by reusable-publish-release.yml'
+        required: true
+        type: string
+    outputs:
+      release_state:
+        description: 'published after successful finalization'
+        value: ${{ jobs.finalize.outputs.release_state }}
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: release-${{ github.repository }}-${{ inputs.target_sha }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    outputs:
+      release_state: ${{ steps.publish.outputs.release_state }}
+    steps:
+      - name: Verify draft and publish Release
+        id: publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag_name }}
+          TARGET_SHA: ${{ inputs.target_sha }}
+          RUN_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ||
+                ! "$TARGET_SHA" =~ ^[0-9a-f]{40}$ || "$TARGET_SHA" != "$RUN_SHA" ]]; then
+            echo '::error::Release tag or target SHA does not match this workflow run'
+            exit 1
+          fi
+
+          tag_ref="refs/tags/$TAG"
+          tag_json=$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$TAG" |
+            jq -c --arg ref "$tag_ref" '.[] | select(.ref == $ref)')
+          if [[ -z "$tag_json" ]]; then
+            echo "::error::Release tag $TAG does not exist"
+            exit 1
+          fi
+          object_type=$(jq -r '.object.type' <<< "$tag_json")
+          object_sha=$(jq -r '.object.sha' <<< "$tag_json")
+          while [[ "$object_type" == tag ]]; do
+            tag_object=$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$object_sha")
+            object_type=$(jq -r '.object.type' <<< "$tag_object")
+            object_sha=$(jq -r '.object.sha' <<< "$tag_object")
+          done
+          if [[ "$object_type" != commit || "$object_sha" != "$TARGET_SHA" ]]; then
+            echo "::error::Release tag $TAG points to $object_sha, expected $TARGET_SHA"
+            exit 1
+          fi
+
+          releases=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" |
+            jq -sc --arg tag "$TAG" '[.[][] | select(.tag_name == $tag)]')
+          if [[ $(jq 'length' <<< "$releases") != 1 ]]; then
+            echo "::error::Expected exactly one Release for $TAG"
+            exit 1
+          fi
+          release_json=$(jq -c '.[0]' <<< "$releases")
+          recorded_target=$(jq -r '.target_commitish // ""' <<< "$release_json")
+          if [[ "$recorded_target" =~ ^[0-9a-f]{40}$ && "$recorded_target" != "$TARGET_SHA" ]]; then
+            echo "::error::Release $TAG records a different target SHA: $recorded_target"
+            exit 1
+          fi
+          release_draft=$(jq -r '.draft' <<< "$release_json")
+          if [[ "$release_draft" == true ]]; then
+            gh release edit "$TAG" --draft=false --repo "$GITHUB_REPOSITORY"
+          elif [[ "$release_draft" != false ]]; then
+            echo "::error::Unexpected Release state for $TAG"
+            exit 1
+          fi
+
+          confirmed_releases=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" |
+            jq -sc --arg tag "$TAG" '[.[][] | select(.tag_name == $tag)]')
+          if [[ $(jq 'length' <<< "$confirmed_releases") != 1 ]]; then
+            echo "::error::Expected exactly one Release for $TAG"
+            exit 1
+          fi
+          confirmed_release=$(jq -c '.[0]' <<< "$confirmed_releases")
+          confirmed_tag=$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$TAG" |
+            jq -c --arg ref "$tag_ref" '.[] | select(.ref == $ref)')
+          confirmed_type=$(jq -r '.object.type' <<< "$confirmed_tag")
+          confirmed_sha=$(jq -r '.object.sha' <<< "$confirmed_tag")
+          while [[ "$confirmed_type" == tag ]]; do
+            tag_object=$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$confirmed_sha")
+            confirmed_type=$(jq -r '.object.type' <<< "$tag_object")
+            confirmed_sha=$(jq -r '.object.sha' <<< "$tag_object")
+          done
+          if [[ $(jq -r '.tag_name' <<< "$confirmed_release") != "$TAG" ||
+                $(jq -r '.draft' <<< "$confirmed_release") != false ||
+                "$confirmed_type" != commit || "$confirmed_sha" != "$TARGET_SHA" ]]; then
+            echo "::error::Release $TAG did not reach the expected published state or its tag changed"
+            exit 1
+          fi
+          echo 'release_state=published' >> "$GITHUB_OUTPUT"
