@@ -26,7 +26,7 @@ jobs:
           args: -color
 
   release-workflows:
-    name: Test release workflow states
+    name: Test release workflows
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -35,8 +35,11 @@ jobs:
       - name: Run mocked release scenarios
         run: bash tests/release-workflows.sh
 
+      - name: Run Rust prepare scenarios
+        run: bash tests/rust-prepare.sh
+
       - name: Check scenario shell script
-        run: shellcheck tests/release-workflows.sh
+        run: shellcheck tests/release-workflows.sh tests/rust-prepare.sh
 
   pester:
     name: Test key management (Pester)

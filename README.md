@@ -12,6 +12,7 @@ GitHub Organization (`scottlz0310`) 向けのリリース自動化 Reusable Work
    - 手動トリガー (`workflow_dispatch`) を受け、GitHub App 名義でリリース準備 PR を自動起票。
    - `target_version` の正規表現バリデーション（SemVer 検証、コマンドインジェクション防止）。
    - 事前定義された安全な `bump_strategy`（`npm`, `rust`, `dotnet`, `go`, `none`）によるバージョン定義ファイル更新。
+   - `rust` は対象 package の `Cargo.toml` と workspace ルートの `Cargo.lock` を同期し、`--locked` で整合を確認。
    - `CHANGELOG.md` の `[Unreleased]` 確定および比較リンク更新。
    - サードパーティ Actions を完全なコミット SHA にピン留め。
 2. [`.github/workflows/reusable-publish-release.yml`](.github/workflows/reusable-publish-release.yml)
@@ -83,6 +84,15 @@ jobs:
       target_version: ${{ inputs.target_version }}
       # 言語に応じた bump_strategy を指定 (npm, rust, dotnet, go, none)
       bump_strategy: "npm"
+```
+
+`bump_strategy: "rust"` では、既定の `Cargo.toml`、または `version_file` で指定した workspace member の manifest にある直接指定の `[package].version` を更新します。対象の manifest と workspace ルートの `Cargo.lock` は Git で追跡されている必要があります。複数 package の workspace では指定した package だけを更新し、他の package や依存関係の版が変わる場合は失敗します。`[workspace.package].version` を継承する package、版の記載がない package、既に対象版の package は対象外として失敗します。実行環境には Cargo と Python 3.11 以降が必要です。
+
+```yaml
+with:
+  target_version: "0.2.0"
+  bump_strategy: "rust"
+  version_file: "crates/my-app/Cargo.toml" # ルート package なら省略
 ```
 
 ### 2. `.github/workflows/publish-release.yml`
