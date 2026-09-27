@@ -7,12 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-09-27
+
 ### Added
 - GitHub App 鍵管理スクリプトの Pester 6.2.0 テスト、Windows CI、Codecov カバレッジ送信を追加。
 - リリースコミットに固定した draft Release、同一 SHA の再実行、成果物検証後に公開する reusable workflow とモック検証を追加。
 
 ### Changed
 - Pester の固定バージョンを共有 Renovate プリセットで追跡。
+- Rust のリリース準備では、Git で追跡済みの workspace `Cargo.lock` を必須とする。
 
 ### Fixed
 - Release 作成直後の一覧反映遅延で publish workflow が失敗する問題を修正。
@@ -51,5 +54,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enforced `commit_message_prefix` check at the job level and pinned release checkout/target to trigger commit SHA in `reusable-publish-release.yml`.
 - Aligned Organization secret names in design document with workflow implementation (`RELEASE_BOT_APP_ID`, `RELEASE_BOT_PRIVATE_KEY`).
 
-[Unreleased]: https://github.com/scottlz0310/release-automate/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/scottlz0310/release-automate/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/scottlz0310/release-automate/compare/v1.0.0...v2.0.0
 [1.0.0]: https://github.com/scottlz0310/release-automate/releases/tag/v1.0.0

@@ -207,7 +207,7 @@ on:
 
 jobs:
   prepare:
-    uses: scottlz0310/release-automate/.github/workflows/reusable-prepare-release.yml@v1
+    uses: scottlz0310/release-automate/.github/workflows/reusable-prepare-release.yml@v2
     secrets: inherit
     with:
       target_version: ${{ inputs.target_version }}
@@ -251,7 +251,7 @@ on:
 
 jobs:
   publish:
-    uses: scottlz0310/release-automate/.github/workflows/reusable-publish-release.yml@v1
+    uses: scottlz0310/release-automate/.github/workflows/reusable-publish-release.yml@v2
     permissions:
       contents: write
     with:
