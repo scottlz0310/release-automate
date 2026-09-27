@@ -78,7 +78,7 @@ on:
 
 jobs:
   prepare:
-    uses: scottlz0310/release-automate/.github/workflows/reusable-prepare-release.yml@v1
+    uses: scottlz0310/release-automate/.github/workflows/reusable-prepare-release.yml@v2
     secrets: inherit
     with:
       target_version: ${{ inputs.target_version }}
@@ -107,7 +107,7 @@ on:
 
 jobs:
   publish:
-    uses: scottlz0310/release-automate/.github/workflows/reusable-publish-release.yml@v1
+    uses: scottlz0310/release-automate/.github/workflows/reusable-publish-release.yml@v2
     permissions:
       contents: write
     with:
@@ -170,6 +170,6 @@ jobs:
       target_sha: ${{ needs.draft.outputs.target_sha }}
 ```
 
-`<固定コミットSHA>` はこの 2 つの reusable workflow を含む `release-automate` の同一コミット、および利用側で採用する checkout のコミットに置き換えます。現行の `@v1` は新しい finalize workflow を含まないため、そのままでは段階的公開に使えません。タグは `GITHUB_TOKEN` で作るため、タグ push を起点とする別 workflow に依存せず、この caller の `needs` で接続してください。
+`<固定コミットSHA>` はこの 2 つの reusable workflow を含む `release-automate` の同一コミット、および利用側で採用する checkout のコミットに置き換えます。`@v1` は finalize workflow を含まないため、段階的公開には v2 以降を使用します。タグは `GITHUB_TOKEN` で作るため、タグ push を起点とする別 workflow に依存せず、この caller の `needs` で接続してください。
 
 再実行では、同じ SHA の draft は再利用されます。添付ジョブは既存 asset を確認して重複添付を避け、検証ジョブは毎回 Release 上の asset を確認してください。公開失敗後は同じ run を再実行できます。異なる SHA の既存タグは失敗し、公開済み Release は再実行でも変更されません。`release_state` が `published` の再実行では添付・検証・公開ジョブをスキップします。
