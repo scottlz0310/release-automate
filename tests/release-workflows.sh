@@ -47,14 +47,31 @@ case "$1" in
         echo '[]'
       fi
     elif [[ "$1" == --paginate && "$2" == */releases\?per_page=100 ]]; then
+      echo list-releases >> "$state/calls"
+      if [[ -f "$state/list_lag" ]]; then
+        remaining=$(cat "$state/list_lag")
+        if (( remaining > 0 )); then
+          printf '%s' "$((remaining - 1))" > "$state/list_lag"
+          echo '[]'
+          exit 0
+        fi
+      fi
       if [[ -f "$state/release_state" ]]; then
         draft=false
         if [[ $(cat "$state/release_state") == draft ]]; then
           draft=true
         fi
+        if [[ -f "$state/list_draft_override" ]]; then
+          draft=$(cat "$state/list_draft_override")
+        fi
         recorded_target=$(cat "$state/release_target" 2>/dev/null || cat "$state/tag_sha" 2>/dev/null || echo '')
-        printf '[{"tag_name":"%s","draft":%s,"target_commitish":"%s"}]\n' \
-          "$tag" "$draft" "$recorded_target"
+        release_json=$(printf '{"tag_name":"%s","draft":%s,"target_commitish":"%s"}' \
+          "$tag" "$draft" "$recorded_target")
+        if [[ -f "$state/list_duplicate" ]]; then
+          printf '[%s,%s]\n' "$release_json" "$release_json"
+        else
+          printf '[%s]\n' "$release_json"
+        fi
       else
         echo '[]'
       fi
@@ -80,6 +97,9 @@ case "$1" in
         done
         printf '%s' "$release_state" > "$state/release_state"
         echo create-release >> "$state/calls"
+        if [[ -f "$state/list_lag_after_create" ]]; then
+          cp "$state/list_lag_after_create" "$state/list_lag"
+        fi
         if [[ -f "$state/fail_after_create" ]]; then
           rm "$state/fail_after_create"
           echo 'Simulated response failure after creation' >&2
@@ -103,6 +123,11 @@ case "$1" in
 esac
 MOCK
 chmod +x "$test_dir/bin/gh"
+cat > "$test_dir/bin/sleep" <<'MOCK'
+#!/usr/bin/env bash
+echo sleep >> "$MOCK_STATE/calls"
+MOCK
+chmod +x "$test_dir/bin/sleep"
 
 export PATH="$test_dir/bin:$PATH"
 export MOCK_STATE="$test_dir/state"
@@ -130,7 +155,7 @@ count_calls() {
 
 assert_count() {
   [[ $(count_calls "$1") == "$2" ]] || {
-    echo "Expected $2 calls to $1" >&2
+    echo "Expected $2 calls to $1, got $(count_calls "$1")" >&2
     exit 1
   }
 }
@@ -226,5 +251,45 @@ if RUN_SHA=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb run_finalize 2>/dev/null; th
   exit 1
 fi
 assert_count publish-release 0
+
+# A newly created Release may be absent from the list for a few reads.
+for release_mode in true false; do
+  reset_state
+  printf 2 > "$MOCK_STATE/list_lag_after_create"
+  DRAFT=$release_mode run_publish
+  assert_count create-release 1
+  assert_count sleep 2
+  if [[ "$release_mode" == true ]]; then
+    grep -q '^release_state=draft$' "$GITHUB_OUTPUT"
+  else
+    grep -q '^release_state=published$' "$GITHUB_OUTPUT"
+  fi
+done
+
+# An absent, duplicate, or wrongly staged Release must still fail.
+reset_state
+printf 9 > "$MOCK_STATE/list_lag_after_create"
+if run_publish 2>/dev/null; then
+  echo 'Release list retry limit was ignored' >&2
+  exit 1
+fi
+assert_count sleep 4
+assert_count list-releases 7
+
+reset_state
+touch "$MOCK_STATE/list_duplicate"
+if run_publish 2>/dev/null; then
+  echo 'Duplicate Releases were accepted' >&2
+  exit 1
+fi
+assert_count sleep 0
+
+reset_state
+printf false > "$MOCK_STATE/list_draft_override"
+if run_publish 2>/dev/null; then
+  echo 'Unexpected Release state was accepted' >&2
+  exit 1
+fi
+assert_count sleep 0
 
 echo 'Release workflow scenarios passed'
