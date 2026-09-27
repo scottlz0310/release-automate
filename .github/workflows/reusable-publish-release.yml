@@ -172,12 +172,19 @@ jobs:
             gh release create "$TAG" "${release_args[@]}" --repo "$GITHUB_REPOSITORY"
           fi
 
-          confirmed_releases=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" |
-            jq -sc --arg tag "$TAG" '[.[][] | select(.tag_name == $tag)]')
-          if [[ $(jq 'length' <<< "$confirmed_releases") != 1 ]]; then
-            echo "::error::Expected exactly one Release for $TAG"
-            exit 1
-          fi
+          for attempt in {1..5}; do
+            confirmed_releases=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" |
+              jq -sc --arg tag "$TAG" '[.[][] | select(.tag_name == $tag)]')
+            confirmed_count=$(jq 'length' <<< "$confirmed_releases")
+            if (( confirmed_count == 1 )); then
+              break
+            fi
+            if (( confirmed_count > 1 || attempt == 5 )); then
+              echo "::error::Expected exactly one Release for $TAG"
+              exit 1
+            fi
+            sleep 1
+          done
           confirmed_release=$(jq -c '.[0]' <<< "$confirmed_releases")
           confirmed_draft=$(jq -r '.draft' <<< "$confirmed_release")
           expected_draft=false
