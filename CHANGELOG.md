@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- lefthook による Git フック（`pre-commit` での actionlint によるワークフロー構文検証、`pre-push` での Pester テスト）を追加。
+
 ## [2.0.0] - 2026-09-27
 
 ### Added
