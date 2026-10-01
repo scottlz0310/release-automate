@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - lefthook による Git フック（`pre-commit` での actionlint によるワークフロー構文検証、`pre-push` での Pester テスト）を追加。
+- README および設計書に Lefthook の導入手順と `lefthook install` によるフック有効化手順を追記。
 
 ## [2.0.0] - 2026-09-27
 

@@ -268,3 +268,28 @@ jobs:
    GitHub App により自動作成された PR を確認し、`Squash and merge` を実行。
 3. **自動リリース完了:**
    `main` へのマージコミットを検知して `Publish Release` が自動で発火し、該当コミットへの Git タグ付与および GitHub Release ページへの公開が完了。
+
+---
+
+## 6. 開発環境・ローカル品質ゲート（Lefthook）
+
+本リポジトリ自体の開発・保守において、ワークフロー構文ミスやスクリプト不具合を早期検知するため、Lefthook による Git フックを導入しています。
+
+### 6.1. セットアップ手順
+
+1. **Lefthook CLI の導入**:
+   ```powershell
+   go install github.com/evilmartians/lefthook@latest
+   # または scoop install lefthook
+   ```
+2. **フックの有効化**:
+   ```powershell
+   lefthook install
+   ```
+
+### 6.2. 品質ゲートの構成
+
+- **`pre-commit`**:
+  `.github/workflows/*.{yml,yaml}` の変更時に `actionlint -shellcheck=` を実行し、Reusable Workflows の構文およびスキーマ妥当性をコミット前に検証します。
+- **`pre-push`**:
+  プッシュ前に `pwsh -NoProfile -Command "Invoke-Pester -Path ./tests"` を自動実行し、鍵管理スクリプト（`scripts/*.ps1`）のユニットテスト全 36 件が通ることを強制します。
