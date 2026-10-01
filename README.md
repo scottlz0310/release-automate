@@ -45,6 +45,24 @@ Bitwarden CLI がない場合は、バックアップ時に表示された DPAPI
 
 鍵ローテーションでは、新鍵を生成して同じバックアップ・照合を行い、`scripts/rotate-release-bot-key.ps1` を実行します。新鍵でワークフローが成功するまで旧鍵は GitHub App 設定から削除しません。スクリプトは GitHub App の鍵自体を削除しません。
 
+### 開発セットアップと品質ゲート（Lefthook）
+
+本リポジトリの開発では [Lefthook](https://github.com/evilmartians/lefthook) を使用してコミット前・プッシュ前の品質ゲートを管理しています。
+
+1. **Lefthook のインストール**（未導入の場合）:
+   ```powershell
+   go install github.com/evilmartians/lefthook@latest
+   # または scoop install lefthook / winget install EvilMartians.Lefthook
+   ```
+
+2. **Git hooks のセットアップ**:
+   クローン後、リポジトリルートで以下を実行して Git hooks を有効化します。
+   ```powershell
+   lefthook install
+   ```
+   - `pre-commit`: ワークフロー定義ファイル（`.github/workflows/*.yml`）変更時に `actionlint` で構文チェック
+   - `pre-push`: プッシュ前に Pester テストを自動実行
+
 ### 鍵管理スクリプトのテスト
 
 Windows の PowerShell 7.4 以降で Pester 6.2.0 を使います。テストでは一時的に生成した鍵と模擬 CLI を使い、実際の Bitwarden Vault と GitHub Secrets には接続しません。

@@ -1,0 +1,14 @@
+# Lefthook configuration for release-automate
+# https://github.com/evilmartians/lefthook
+
+pre-commit:
+  parallel: true
+  commands:
+    actionlint:
+      glob: ".github/workflows/*.{yml,yaml}"
+      run: actionlint -shellcheck= {staged_files}
+
+pre-push:
+  commands:
+    pester:
+      run: pwsh -NoProfile -Command "Invoke-Pester -Path ./tests"
