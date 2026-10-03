@@ -11,8 +11,9 @@ GitHub Organization (`scottlz0310`) 向けのリリース自動化 Reusable Work
 1. [`.github/workflows/reusable-prepare-release.yml`](.github/workflows/reusable-prepare-release.yml)
    - 手動トリガー (`workflow_dispatch`) を受け、GitHub App 名義でリリース準備 PR を自動起票。
    - `target_version` の正規表現バリデーション（SemVer 検証、コマンドインジェクション防止）。
-   - 事前定義された安全な `bump_strategy`（`npm`, `rust`, `dotnet`, `go`, `none`）によるバージョン定義ファイル更新。
+   - 事前定義された安全な `bump_strategy`（`npm`, `rust`, `dotnet`, `go`, `tauri`, `none`）によるバージョン定義ファイル更新。
    - `rust` は対象 package の `Cargo.toml` と workspace ルートの `Cargo.lock` を同期し、`--locked` で整合を確認。
+   - `tauri` は `package.json`、`tauri.conf.json`、`Cargo.toml`、`Cargo.lock` の版を、同じ版にそろえて更新。
    - `CHANGELOG.md` の `[Unreleased]` 確定および比較リンク更新。
    - サードパーティ Actions を完全なコミット SHA にピン留め。
 2. [`.github/workflows/reusable-publish-release.yml`](.github/workflows/reusable-publish-release.yml)
@@ -100,7 +101,7 @@ jobs:
     secrets: inherit
     with:
       target_version: ${{ inputs.target_version }}
-      # 言語に応じた bump_strategy を指定 (npm, rust, dotnet, go, none)
+      # 言語に応じた bump_strategy を指定 (npm, rust, dotnet, go, tauri, none)
       bump_strategy: "npm"
 ```
 
@@ -111,6 +112,20 @@ with:
   target_version: "0.2.0"
   bump_strategy: "rust"
   version_file: "crates/my-app/Cargo.toml" # ルート package なら省略
+```
+
+`bump_strategy: "tauri"` は、リポジトリルートの `package.json`、`version_file` で指定した `tauri.conf.json`（既定は `src-tauri/tauri.conf.json`）、その同じディレクトリの `Cargo.toml`（と、workspace ルートの `Cargo.lock`）の版を、まとめて更新します。次の規則に従い、満たさなければ何も書き換えずに失敗します。
+
+- 3 つのファイル（`package.json`、`tauri.conf.json`、`Cargo.toml`）が、すべて存在し、更新の前に同じ版であること（食い違いを黙って揃えません）。
+- `package.json` と `tauri.conf.json` に、最上位の `"version"` が 1 つだけあること。入れ子の `version` キーは書き換えません。
+- JSON は再出力せず、版の値の文字列だけを置き換えます（整形と改行コードを保ちます）。`package-lock.json` などのロックファイルは更新しません（`Cargo.lock` を除く）。
+- `Cargo.toml` と `Cargo.lock` の扱いは `rust` と同じです（Git で追跡されていること、`[package].version` を直接指定していること、依存関係の版が変わらないこと）。
+
+```yaml
+with:
+  target_version: "0.2.0"
+  bump_strategy: "tauri"
+  version_file: "src-tauri/tauri.conf.json" # 既定の場所なら省略
 ```
 
 ### 2. `.github/workflows/publish-release.yml`
