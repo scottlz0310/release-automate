@@ -8,12 +8,12 @@ on:
         required: true
         type: string
       bump_strategy:
-        description: 'Built-in version bump strategy: none, npm, rust, dotnet, go'
+        description: 'Built-in version bump strategy: none, npm, rust, dotnet, go, tauri'
         required: false
         type: string
         default: 'none'
       version_file:
-        description: 'Path to version file (required when bump_strategy is go or dotnet, optional for rust)'
+        description: 'Path to version file (required when bump_strategy is go or dotnet, optional for rust; for tauri, the path to tauri.conf.json, default src-tauri/tauri.conf.json)'
         required: false
         type: string
         default: ''
@@ -90,21 +90,14 @@ jobs:
           STRATEGY: ${{ inputs.bump_strategy }}
           VERSION_FILE: ${{ inputs.version_file }}
         run: |
-          case "$STRATEGY" in
-            none|"")
-              echo "No bump strategy specified. Skipping version file update."
-              ;;
-            npm)
-              echo "Running npm version $VERSION --no-git-tag-version"
-              npm version "$VERSION" --no-git-tag-version
-              ;;
-            rust)
-              CARGO_FILE="${VERSION_FILE:-Cargo.toml}"
-              if [ ! -f "$CARGO_FILE" ]; then
-                echo "::error::Cargo file not found: $CARGO_FILE"
-                exit 1
-              fi
-              python3 - "$CARGO_FILE" "$VERSION" <<'PY'
+          # Cargo.toml と、workspace ルートの Cargo.lock を更新する（rust と tauri で共有する）。
+          bump_rust() {
+            local cargo_file=$1
+            if [ ! -f "$cargo_file" ]; then
+              echo "::error::Cargo file not found: $cargo_file"
+              exit 1
+            fi
+            python3 - "$cargo_file" "$VERSION" <<'PY'
           import copy
           import pathlib
           import re
@@ -167,6 +160,111 @@ jobs:
                           "--manifest-path", str(manifest)], stdout=subprocess.DEVNULL, check=True)
           print(f"Updated {name} {old_version} -> {target_version} in {manifest} and {lock}")
           PY
+          }
+
+          # package.json と tauri.conf.json の最上位の "version" を書き換える。
+          #   check: 3 つの版（package.json、tauri.conf.json、Cargo.toml）が一致し、目標の版と違うことを
+          #          確かめて、現在の版を標準出力へ出す（何も書き換えない）
+          #   apply: 現在の版が check の値のままであることを確かめて、書き換える
+          # 整形を変えないよう、JSON を再出力せず、版の値の文字列だけを置き換える（改行コードも保つ）。
+          bump_tauri_json() {
+            python3 - "$@" <<'PY'
+          import json
+          import pathlib
+          import re
+          import sys
+          import tomllib
+
+          mode, conf_arg, cargo_arg, target_version = sys.argv[1:5]
+          expected_old = sys.argv[5] if len(sys.argv) > 5 else None
+          json_files = [pathlib.Path("package.json"), pathlib.Path(conf_arg)]
+          cargo = pathlib.Path(cargo_arg)
+          for path in (*json_files, cargo):
+              if not path.is_file():
+                  sys.exit(f"::error::Tauri version file not found: {path}")
+
+          VALUE = re.compile(r'\s*:\s*"((?:[^"\\]|\\.)*)"')
+
+          def read(path):
+              with open(path, encoding="utf-8", newline="") as handle:
+                  return handle.read()
+
+          def top_level_version(text, path):
+              try:
+                  json.loads(text)
+              except ValueError as error:
+                  sys.exit(f"::error::{path} is not valid JSON: {error}")
+              # 入れ子の "version" キーは対象外にするため、括弧の深さが 1 のキーだけを見る。
+              depth = 0
+              found = []
+              index = 0
+              while index < len(text):
+                  char = text[index]
+                  if char == '"':
+                      end = index + 1
+                      while text[end] != '"':
+                          end += 2 if text[end] == "\\" else 1
+                      if depth == 1 and text[index + 1:end] == "version":
+                          match = VALUE.match(text, end + 1)
+                          if match:
+                              found.append(match.span(1))
+                      index = end + 1
+                      continue
+                  if char in "{[":
+                      depth += 1
+                  elif char in "}]":
+                      depth -= 1
+                  index += 1
+              if len(found) != 1:
+                  sys.exit(f'::error::{path} needs exactly one top-level "version" string')
+              return found[0]
+
+          if mode == "check":
+              versions = {}
+              for path in json_files:
+                  text = read(path)
+                  start, end = top_level_version(text, path)
+                  versions[str(path)] = text[start:end]
+              package = tomllib.loads(read(cargo)).get("package")
+              if not isinstance(package, dict) or not isinstance(package.get("version"), str):
+                  sys.exit(f"::error::{cargo} needs a direct [package].version string")
+              versions[str(cargo)] = package["version"]
+              if len(set(versions.values())) != 1:
+                  sys.exit(f"::error::Tauri version files disagree before the bump: {versions}")
+              old_version = next(iter(versions.values()))
+              if old_version == target_version:
+                  sys.exit(f"::error::Tauri version files already have version {target_version}")
+              print(old_version)
+          else:
+              for path in json_files:
+                  text = read(path)
+                  start, end = top_level_version(text, path)
+                  if text[start:end] != expected_old:
+                      sys.exit(f"::error::{path} changed during the bump")
+                  with open(path, "w", encoding="utf-8", newline="") as handle:
+                      handle.write(text[:start] + target_version + text[end:])
+                  print(f"Updated {path} {expected_old} -> {target_version}")
+          PY
+          }
+
+          case "$STRATEGY" in
+            none|"")
+              echo "No bump strategy specified. Skipping version file update."
+              ;;
+            npm)
+              echo "Running npm version $VERSION --no-git-tag-version"
+              npm version "$VERSION" --no-git-tag-version
+              ;;
+            rust)
+              bump_rust "${VERSION_FILE:-Cargo.toml}"
+              ;;
+            tauri)
+              CONF_FILE="${VERSION_FILE:-src-tauri/tauri.conf.json}"
+              CARGO_FILE="$(dirname "$CONF_FILE")/Cargo.toml"
+              OLD_VERSION=$(bump_tauri_json check "$CONF_FILE" "$CARGO_FILE" "$VERSION")
+              echo "Bumping Tauri project $OLD_VERSION -> $VERSION"
+              bump_rust "$CARGO_FILE"
+              bump_tauri_json apply "$CONF_FILE" "$CARGO_FILE" "$VERSION" "$OLD_VERSION"
               ;;
             dotnet)
               if [ -z "$VERSION_FILE" ]; then
@@ -229,7 +327,7 @@ jobs:
               fi
               ;;
             *)
-              echo "::error::Unsupported bump_strategy: $STRATEGY. Supported strategies: none, npm, rust, dotnet, go"
+              echo "::error::Unsupported bump_strategy: $STRATEGY. Supported strategies: none, npm, rust, dotnet, go, tauri"
               exit 1
               ;;
           esac

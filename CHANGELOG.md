@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- リリース準備に `bump_strategy: tauri` を追加。`package.json`、`tauri.conf.json`、`Cargo.toml`、`Cargo.lock` の版を、まとめて更新する。更新の前に 3 つのファイルの版が一致していることを確認し、JSON は整形と改行コードを保ったまま版の値だけを置き換える。シナリオテスト `tests/tauri-prepare.sh` を CI に追加。
 - lefthook による Git フック（`pre-commit` での actionlint によるワークフロー構文検証、`pre-push` での Pester テスト）を追加。
 - README および設計書に Lefthook の導入手順と `lefthook install` によるフック有効化手順を追記。
 

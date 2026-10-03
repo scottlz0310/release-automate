@@ -38,8 +38,11 @@ jobs:
       - name: Run Rust prepare scenarios
         run: bash tests/rust-prepare.sh
 
+      - name: Run Tauri prepare scenarios
+        run: bash tests/tauri-prepare.sh
+
       - name: Check scenario shell script
-        run: shellcheck tests/release-workflows.sh tests/rust-prepare.sh
+        run: shellcheck tests/release-workflows.sh tests/rust-prepare.sh tests/tauri-prepare.sh
 
   pester:
     name: Test key management (Pester)
