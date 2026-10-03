@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-10-04
+
 ### Added
 - リリース準備に `bump_strategy: tauri` を追加。`package.json`、`tauri.conf.json`、`Cargo.toml`、`Cargo.lock` の版を、まとめて更新する。更新の前に 3 つのファイルの版が一致していることを確認し、JSON は整形と改行コードを保ったまま版の値だけを置き換える。シナリオテスト `tests/tauri-prepare.sh` を CI に追加。
 - lefthook による Git フック（`pre-commit` での actionlint によるワークフロー構文検証、`pre-push` での Pester テスト）を追加。
@@ -59,6 +61,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enforced `commit_message_prefix` check at the job level and pinned release checkout/target to trigger commit SHA in `reusable-publish-release.yml`.
 - Aligned Organization secret names in design document with workflow implementation (`RELEASE_BOT_APP_ID`, `RELEASE_BOT_PRIVATE_KEY`).
 
-[Unreleased]: https://github.com/scottlz0310/release-automate/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/scottlz0310/release-automate/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/scottlz0310/release-automate/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/scottlz0310/release-automate/compare/v1.0.0...v2.0.0
 [1.0.0]: https://github.com/scottlz0310/release-automate/releases/tag/v1.0.0
