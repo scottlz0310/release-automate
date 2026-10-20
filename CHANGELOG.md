@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **破壊的変更（v3 向け）:** リリース準備の認証を必須の `RELEASE_BOT_CLIENT_ID` に移行し、旧 `RELEASE_BOT_APP_ID` への代替を廃止。secret 登録・鍵ローテーションにも `-ClientId` を必須化。数値 App ID による既存バックアップの照合と保存形式は維持し、旧 secret は更新・削除しない（#33）。
+- Linux の CI 品質ゲートを Ubuntu 26.04 に先行移行。actionlint の未対応ラベル診断だけを CI 定義内で除外し、上流対応版への更新後に削除する。reusable workflows の `ubuntu-latest` と Windows の Pester は維持（#34）。
 
 ### Fixed
 - README の draft 検証ジョブの権限を `contents: write` に修正し、draft の読み取り・reusable workflow 呼び出し元の権限と checkout なしでの `gh` の対象指定を説明（#30）。
