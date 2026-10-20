@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-10-21
+
 ### Added
 - actionlint の Ubuntu 26.04 限定除外について、CI と同じ固定イメージの除外なし診断を分類し、不要化時・想定外診断・実行障害時に CI を失敗させる検知とモック検証を追加（#39）。
 - finalize に既定 false の `resume` を追加し、修正後の保護された既定ブランチの手動実行から既存 draft の公開を再開できるようにした。再開時は祖先関係・リリースコミット・タグ・Release 対象を検証し、公開後の Release 置換・記録対象変更も検出。既定の同一 SHA 契約は維持（#37）。
@@ -72,7 +74,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enforced `commit_message_prefix` check at the job level and pinned release checkout/target to trigger commit SHA in `reusable-publish-release.yml`.
 - Aligned Organization secret names in design document with workflow implementation (`RELEASE_BOT_APP_ID`, `RELEASE_BOT_PRIVATE_KEY`).
 
-[Unreleased]: https://github.com/scottlz0310/release-automate/compare/v2.1.0...HEAD
+[Unreleased]: https://github.com/scottlz0310/release-automate/compare/v3.0.0...HEAD
+[3.0.0]: https://github.com/scottlz0310/release-automate/compare/v2.1.0...v3.0.0
 [2.1.0]: https://github.com/scottlz0310/release-automate/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/scottlz0310/release-automate/compare/v1.0.0...v2.0.0
 [1.0.0]: https://github.com/scottlz0310/release-automate/releases/tag/v1.0.0

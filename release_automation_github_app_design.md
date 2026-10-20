@@ -59,7 +59,7 @@ Organization (`scottlz0310`) 内の全リポジトリで共通利用できるよ
    * **Webhook:** **Active** を無効にする
    * **Repository permissions:** `Contents: Read and write`、`Pull requests: Read and write`
    * **Where can this GitHub App be installed?:** `Only on this organization`
-3. App を作成し、設定画面の **App ID** と **Client ID** を控えます。App ID は既存バックアップの識別・照合に保持し、Client ID を v3 の認証に使います。以下は v3 の公開準備中の契約であり、公開前の検証にはレビュー済みの対応コミット SHA を指定します。
+3. App を作成し、設定画面の **App ID** と **Client ID** を控えます。App ID は既存バックアップの識別・照合に保持し、Client ID を v3 の認証に使います。
 
 ### 2.2. 秘密鍵の生成とバックアップ
 
@@ -262,7 +262,7 @@ on:
 
 jobs:
   publish:
-    uses: scottlz0310/release-automate/.github/workflows/reusable-publish-release.yml@v2
+    uses: scottlz0310/release-automate/.github/workflows/reusable-publish-release.yml@v3
     permissions:
       contents: write
     with:

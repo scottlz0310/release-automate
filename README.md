@@ -28,7 +28,7 @@ GitHub Organization (`scottlz0310`) 向けのリリース自動化 Reusable Work
 
 ## GitHub App のセットアップと鍵管理
 
-以下は v3 向けの認証契約です。v3 は公開準備中のため、公開前に試す場合はレビュー済みの対応コミット SHA を指定してください。既存の `@v2` 利用者は後述の移行手順で切り替えます。
+v3 の認証には `RELEASE_BOT_CLIENT_ID` と `RELEASE_BOT_PRIVATE_KEY` を使用します。既存の `@v2` 利用者は後述の移行手順で切り替えます。
 
 セットアップの全手順、初回登録、鍵ローテーションは [設計・運用手順書](release_automation_github_app_design.md) を参照してください。スクリプトは Windows の PowerShell 7.4 以降で実行します。
 
@@ -54,7 +54,7 @@ Bitwarden CLI がない場合は、バックアップ時に表示された DPAPI
 v3 の prepare workflow は `RELEASE_BOT_CLIENT_ID` を必須とし、旧 `RELEASE_BOT_APP_ID` への代替は行いません。[GitHub は JWT の発行元に Client ID を推奨](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-json-web-token-jwt-for-a-github-app)しています。数値 App ID の secret を改名するだけでは移行になりません。
 
 1. App 設定の Client ID を確認し、上記スクリプトで `RELEASE_BOT_CLIENT_ID` を登録します。秘密鍵は既存バックアップをそのまま使えます。既定以外の App ID で作成したバックアップは `-AppId` も指定します。
-2. v3 公開後、caller の参照を v3 の固定コミット SHA（または `@v3`）に切り替えます。`secrets: inherit` は維持でき、個別指定の場合は `RELEASE_BOT_CLIENT_ID: ${{ secrets.RELEASE_BOT_CLIENT_ID }}` と既存の秘密鍵を渡します。
+2. caller の参照を v3 の固定コミット SHA（または `@v3`）に切り替えます。`secrets: inherit` は維持でき、個別指定の場合は `RELEASE_BOT_CLIENT_ID: ${{ secrets.RELEASE_BOT_CLIENT_ID }}` と既存の秘密鍵を渡します。
 3. caller の prepare が成功することを確認します。`RELEASE_BOT_PRIVATE_KEY` は v2 と共通で、既存の App ID を持つ鍵バックアップの形式も変わりません。
 
 登録・ローテーションスクリプトは旧 `RELEASE_BOT_APP_ID` を更新・削除しません。旧 v2 caller が残る間は旧 secret を保持し、撤去は全 caller の移行確認後に別途判断します。Client ID の登録、caller の変更、v3 の公開はそれぞれ運用時に実施する作業です。
@@ -161,7 +161,7 @@ on:
 
 jobs:
   publish:
-    uses: scottlz0310/release-automate/.github/workflows/reusable-publish-release.yml@v2
+    uses: scottlz0310/release-automate/.github/workflows/reusable-publish-release.yml@v3
     permissions:
       contents: write
     with:
