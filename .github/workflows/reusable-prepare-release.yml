@@ -38,8 +38,8 @@ on:
         type: string
         default: 'chore(release):'
     secrets:
-      RELEASE_BOT_APP_ID:
-        description: 'GitHub App ID for bot authentication'
+      RELEASE_BOT_CLIENT_ID:
+        description: 'GitHub App Client ID for bot authentication'
         required: true
       RELEASE_BOT_PRIVATE_KEY:
         description: 'GitHub App Private Key (PEM format)'
@@ -68,7 +68,7 @@ jobs:
         id: app_token
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
-          app-id: ${{ secrets.RELEASE_BOT_APP_ID }}
+          client-id: ${{ secrets.RELEASE_BOT_CLIENT_ID }}
           private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
 
       - name: Checkout repository

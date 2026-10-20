@@ -59,7 +59,7 @@ Organization (`scottlz0310`) 内の全リポジトリで共通利用できるよ
    * **Webhook:** **Active** を無効にする
    * **Repository permissions:** `Contents: Read and write`、`Pull requests: Read and write`
    * **Where can this GitHub App be installed?:** `Only on this organization`
-3. App を作成し、画面上部の **App ID** を控えます。
+3. App を作成し、設定画面の **App ID** と **Client ID** を控えます。App ID は既存バックアップの識別・照合に保持し、Client ID を v3 の認証に使います。以下は v3 の公開準備中の契約であり、公開前の検証にはレビュー済みの対応コミット SHA を指定します。
 
 ### 2.2. 秘密鍵の生成とバックアップ
 
@@ -103,10 +103,15 @@ pwsh ./scripts/verify-release-bot-key.ps1 `
 
 ```powershell
 pwsh ./scripts/set-release-bot-secrets.ps1 `
-  -Fingerprint 'SHA256:<backup が表示した fingerprint>'
+  -Fingerprint 'SHA256:<backup が表示した fingerprint>' `
+  -ClientId '<GitHub App の Client ID>'
 ```
 
-スクリプトは実行前に確認を求め、`RELEASE_BOT_PRIVATE_KEY` と `RELEASE_BOT_APP_ID` を Organization `scottlz0310` の Actions secrets として全リポジトリ向けに作成または更新します。`gh auth status` に加え、更新後に名前と可視性が `all` であることを確認します。権限エラー時は `gh auth refresh -h github.com -s admin:org` で認証スコープを更新してください。
+スクリプトは実行前に確認を求め、`RELEASE_BOT_PRIVATE_KEY` と `RELEASE_BOT_CLIENT_ID` を Organization `scottlz0310` の Actions secrets として全リポジトリ向けに作成または更新します。`gh auth status` に加え、更新後に名前と可視性が `all` であることを確認します。権限エラー時は `gh auth refresh -h github.com -s admin:org` で認証スコープを更新してください。
+
+Client ID は数値 App ID とは別値です。[GitHub の JWT 仕様は Client ID を推奨](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-json-web-token-jwt-for-a-github-app)しており、v3 は旧 secret への代替を行いません。`-AppId` はバックアップ照合用途として維持し、既定以外の App ID のバックアップでは明示指定します。既存の Bitwarden / DPAPI 形式は変更しません。
+
+v2 からは、新 Client ID secret の登録後、v3 公開時に caller の参照と明示的な secret 指定を切り替え、prepare の成功を確認します。`secrets: inherit` は維持できます。秘密鍵は共通です。旧 `RELEASE_BOT_APP_ID` はスクリプトから更新・削除せず、旧 caller の全移行後に撤去を判断します。secret 登録・caller 変更・v3 公開はそれぞれ別の運用操作です。
 
 ### 2.5. 鍵ローテーション
 
@@ -115,7 +120,7 @@ GitHub App は新旧複数の鍵を同時に保持できるため、次の順で
 1. App 設定で **Generate a private key** を実行し、新しい PEM をダウンロードします。旧鍵は削除しません。
 2. 新しい PEM に `backup-release-bot-key.ps1` を実行し、バックアップ先と fingerprint を記録します。
 3. `verify-release-bot-key.ps1 -PemPath ... -ExpectedFingerprint ...` を実行します。指定したダウンロードファイルと GitHub settings の fingerprint の照合成功後、表示される質問に `y` と答えると、そのファイルを削除できます。
-4. `rotate-release-bot-key.ps1 -Fingerprint ...` を実行し、確認プロンプトを承認します。DPAPI 保存なら `-BackupPath ...` も指定します。このスクリプトは `gh secret set` の upsert を使うため、同じ引数での再実行が可能です。
+4. `rotate-release-bot-key.ps1 -Fingerprint ... -ClientId ...` を実行し、確認プロンプトを承認します。DPAPI 保存なら `-BackupPath ...` も指定します。このスクリプトは `gh secret set` の upsert を使うため、同じ引数での再実行が可能です。
 5. 新しい Organization secret を使うワークフローを実行し、成功を確認します。GitHub は Actions secret の値を読み返せないため、名前・可視性確認と実ワークフロー実行で確認します。
 6. 新鍵での動作確認後に限り、GitHub App 設定画面で旧鍵を手動削除します。スクリプトは旧鍵を削除しません。
 
@@ -141,7 +146,7 @@ GitHub の鍵ローテーション手順は[公式ドキュメント](https://do
 #### シークレット (`secrets`)
 | シークレット名 | 必須 | 説明 |
 | :--- | :--- | :--- |
-| `RELEASE_BOT_APP_ID` | **Yes** | GitHub App の App ID |
+| `RELEASE_BOT_CLIENT_ID` | **Yes** | GitHub App の Client ID（旧 App ID への代替なし） |
 | `RELEASE_BOT_PRIVATE_KEY` | **Yes** | GitHub App の秘密鍵（PEM 形式） |
 
 #### 処理の流れ
@@ -207,7 +212,7 @@ on:
 
 jobs:
   prepare:
-    uses: scottlz0310/release-automate/.github/workflows/reusable-prepare-release.yml@v2
+    uses: scottlz0310/release-automate/.github/workflows/reusable-prepare-release.yml@v3
     secrets: inherit
     with:
       target_version: ${{ inputs.target_version }}
@@ -292,4 +297,4 @@ jobs:
 - **`pre-commit`**:
   `.github/workflows/*.{yml,yaml}` の変更時に `actionlint -shellcheck=` を実行し、Reusable Workflows の構文およびスキーマ妥当性をコミット前に検証します。
 - **`pre-push`**:
-  プッシュ前に `pwsh -NoProfile -Command "Invoke-Pester -Path ./tests"` を自動実行し、鍵管理スクリプト（`scripts/*.ps1`）のユニットテスト全 36 件が通ることを強制します。
+  プッシュ前に `pwsh -NoProfile -Command "Invoke-Pester -Path ./tests"` を自動実行し、鍵管理スクリプト（`scripts/*.ps1`）のユニットテストが通ることを強制します。

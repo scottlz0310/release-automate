@@ -12,6 +12,10 @@ param(
     [ValidateNotNullOrEmpty()]
     [string]$Fingerprint,
 
+    [Parameter(Mandatory = $true)]
+    [ValidateNotNullOrEmpty()]
+    [string]$ClientId,
+
     [string]$BackupPath,
 
     [ValidatePattern('^[0-9]+$')]
@@ -40,7 +44,7 @@ try {
     }
 
     $stage = 'github-secrets'
-    Set-ReleaseBotOrganizationSecrets -Pem $backup.Pem -AppId $AppId -Fingerprint $fingerprintValue
+    Set-ReleaseBotOrganizationSecrets -Pem $backup.Pem -ClientId $ClientId -Fingerprint $fingerprintValue
 }
 catch {
     throw "Organization Actions secrets の更新は $stage ($($_.Exception.GetType().Name)) で停止しました: $($_.Exception.Message) 鍵の内容は表示していません。"
