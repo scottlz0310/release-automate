@@ -1,5 +1,5 @@
 paths:
   .github/workflows/ci.yml:
     ignore:
-      # 上流 #682 / PR #743 の対応版へ更新後、この除外を外して actionlint が通れば削除する（#34）。
+      # 上流対応版への更新後、除外と専用の検知処理・テストを同じ PR で撤去する（#39）。
       - '^label "ubuntu-26\.04" is unknown\.'

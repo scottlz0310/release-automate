@@ -25,6 +25,13 @@ jobs:
         with:
           args: -color
 
+      - name: 限定除外が現在も必要か確認
+        run: |
+          # 通常 lint の uses 宣言を正本とし、digest を二重管理しない。
+          image=$(awk '$1 == "uses:" && $2 ~ /^docker:\/\/rhysd\/actionlint@sha256:/ { sub(/\r$/, "", $2); sub(/^docker:\/\//, "", $2); print $2 }' .github/workflows/ci.yml)
+          bash scripts/check-actionlint-workaround.sh \
+            docker run --rm --network none -v "$GITHUB_WORKSPACE:/repo:ro" -w /repo "$image"
+
   release-workflows:
     name: Test release workflows
     runs-on: ubuntu-26.04
@@ -41,8 +48,11 @@ jobs:
       - name: Run Tauri prepare scenarios
         run: bash tests/tauri-prepare.sh
 
+      - name: 限定除外の判定シナリオを検証
+        run: bash tests/actionlint-workaround.sh
+
       - name: Check scenario shell script
-        run: shellcheck tests/release-workflows.sh tests/rust-prepare.sh tests/tauri-prepare.sh
+        run: shellcheck tests/release-workflows.sh tests/rust-prepare.sh tests/tauri-prepare.sh scripts/check-actionlint-workaround.sh tests/actionlint-workaround.sh
 
   pester:
     name: Test key management (Pester)
