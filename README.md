@@ -22,6 +22,7 @@ GitHub Organization (`scottlz0310`) 向けのリリース自動化 Reusable Work
    - `draft: true` は draft を作成し、`tag_name` / `target_sha` / `release_state` を出力。
 3. [`.github/workflows/reusable-finalize-release.yml`](.github/workflows/reusable-finalize-release.yml)
    - 同じ workflow run の SHA、タグが指すコミット、draft 状態を再確認して公開。公開済みの同一 SHA なら変更せず成功。
+   - 明示的な `resume: true` では、保護された既定ブランチの手動実行から、追加検査を経て過去の draft の公開を再開。
 
 ---
 
@@ -223,3 +224,73 @@ jobs:
 checkout しないジョブで `gh` を使う場合は、[`GH_REPO`](https://cli.github.com/manual/gh_help_environment) に `${{ github.repository }}` を設定するか、`--repo owner/repo` で対象を指定してください。`GITHUB_REPOSITORY` だけでは `gh` の対象リポジトリは指定されません。
 
 再実行では、同じ SHA の draft は再利用されます。添付ジョブは既存 asset を確認して重複添付を避け、検証ジョブは毎回 Release 上の asset を確認してください。公開失敗後は同じ run を再実行できます。異なる SHA の既存タグは失敗し、公開済み Release は再実行でも変更されません。`release_state` が `published` の再実行では添付・検証・公開ジョブをスキップします。
+
+### caller の修正後に既存 draft の公開を再開する場合
+
+リリースコミットの後で caller の不具合を修正した場合、元の run の再実行では修正後の定義を使えません。修正後の保護された既定ブランチで `workflow_dispatch` を実行し、元のタグの成果物を再取得・検証してから `resume: true` を指定します。入力省略時の `resume: false` は従来どおり実行 SHA と対象 SHA の一致を要求します。
+
+再開では以下をすべて確認し、不一致や API エラーなら停止します。
+
+- 手動実行の ref が保護された既定ブランチであること。タグ・feature branch・push・PR イベントからの再開はできません。
+- `target_sha` が実行 SHA と同一、またはその祖先であること。
+- 対象コミットの件名が `chore(release): vX.Y.Z` と一致すること。Squash merge の ` (#番号)` は許容します。publish の接頭辞を変更している場合は、finalize の `commit_message_prefix` にも同じ値を指定します。
+- タグが対象 SHA を指し、同じタグの Release が1件だけで、`target_commitish` が対象 SHA と完全一致すること。branch 名や不明値は受け付けません。
+- 公開後もタグ・Release の ID・記録対象・公開状態が一致すること。既に公開済みの同一対象なら更新せず確認します。
+
+以下はこの機能を含む対応コミット SHA を固定して利用する caller 例です。`verify-release-assets.sh` は利用側が実装する、元の Release からの再取得・検証処理です。公開済み対象の再実行でも同じ検証を行います。
+
+```yaml
+name: Resume Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: '再検証して公開する既存 Release のタグ'
+        required: true
+        type: string
+
+jobs:
+  verify:
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && github.ref_protected
+    runs-on: ubuntu-latest
+    permissions:
+      # 元の draft を再取得するため、読み取りでも write が必要。
+      contents: write
+    outputs:
+      tag_name: ${{ steps.verify.outputs.tag_name }}
+      target_sha: ${{ steps.verify.outputs.target_sha }}
+    steps:
+      - uses: actions/checkout@<固定コミットSHA>
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - id: verify
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag_name }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo '::error::再開するタグの形式が不正です'
+            exit 1
+          fi
+          target_sha=$(git rev-parse --verify "refs/tags/$TAG^{commit}")
+          ./scripts/verify-release-assets.sh "$TAG"
+          echo "tag_name=$TAG" >> "$GITHUB_OUTPUT"
+          echo "target_sha=$target_sha" >> "$GITHUB_OUTPUT"
+
+  finalize:
+    needs: verify
+    if: needs.verify.result == 'success'
+    uses: scottlz0310/release-automate/.github/workflows/reusable-finalize-release.yml@<固定コミットSHA>
+    permissions:
+      contents: write
+    with:
+      tag_name: ${{ needs.verify.outputs.tag_name }}
+      target_sha: ${{ needs.verify.outputs.target_sha }}
+      resume: true
+```
+
+成果物の妥当性は caller の責務です。`resume: true` 自体が検証済みの証明になるわけではなく、同一 run の検証ジョブへの `needs` が必要です。write 権限者が caller 自体を改変できることを、この reusable workflow だけで防ぐものではありません。

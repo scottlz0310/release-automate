@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- finalize に既定 false の `resume` を追加し、修正後の保護された既定ブランチの手動実行から既存 draft の公開を再開できるようにした。再開時は祖先関係・リリースコミット・タグ・Release 対象を検証し、公開後の Release 置換・記録対象変更も検出。既定の同一 SHA 契約は維持（#37）。
+
 ### Changed
 - **破壊的変更（v3 向け）:** リリース準備の認証を必須の `RELEASE_BOT_CLIENT_ID` に移行し、旧 `RELEASE_BOT_APP_ID` への代替を廃止。secret 登録・鍵ローテーションにも `-ClientId` を必須化。数値 App ID による既存バックアップの照合と保存形式は維持し、旧 secret は更新・削除しない（#33）。
 - Linux の CI 品質ゲートを Ubuntu 26.04 に先行移行。actionlint の未対応ラベル診断だけを CI 定義内で除外し、上流対応版への更新後に削除する。reusable workflows の `ubuntu-latest` と Windows の Pester は維持（#34）。
