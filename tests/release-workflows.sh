@@ -7,6 +7,7 @@ trap 'rm -rf "$test_dir"' EXIT
 
 extract_step() {
   awk -v step="$2" '
+    { sub(/\r$/, "") }
     $0 == "      - name: " step { found = 1; next }
     found && /^        run: \|$/ { running = 1; next }
     running && /^      - / { exit }
@@ -39,14 +40,31 @@ case "$1" in
       done
       echo create-tag >> "$state/calls"
       echo '{}'
+    elif [[ "$1" == "repos/$GITHUB_REPOSITORY/compare/$TARGET_SHA...$RUN_SHA" ]]; then
+      [[ ! -f "$state/fail_compare" ]]
+      comparison_status=$(cat "$state/comparison_status" 2>/dev/null || echo ahead)
+      merge_base=$(cat "$state/merge_base" 2>/dev/null || echo "$TARGET_SHA")
+      printf '{"status":"%s","merge_base_commit":{"sha":"%s"}}\n' "$comparison_status" "$merge_base"
+    elif [[ "$1" == "repos/$GITHUB_REPOSITORY/commits/$TARGET_SHA" ]]; then
+      [[ ! -f "$state/fail_commit" ]]
+      subject=$(cat "$state/subject" 2>/dev/null || echo 'chore(release): v1.2.3')
+      commit_sha=$(cat "$state/commit_sha" 2>/dev/null || echo "$TARGET_SHA")
+      jq -n --arg sha "$commit_sha" --arg message "$subject" '{sha: $sha, commit: {message: $message}}'
+    elif [[ "$1" == */git/tags/cccccccccccccccccccccccccccccccccccccccc ]]; then
+      printf '{"object":{"type":"commit","sha":"%s"}}\n' "$(cat "$state/tag_sha")"
     elif [[ "$1" == */git/matching-refs/tags/$tag ]]; then
       if [[ -f "$state/tag_sha" ]]; then
-        printf '[{"ref":"refs/tags/%s","object":{"type":"commit","sha":"%s"}}]\n' \
-          "$tag" "$(cat "$state/tag_sha")"
+        if [[ -f "$state/annotated_tag" ]]; then
+          printf '[{"ref":"refs/tags/%s","object":{"type":"tag","sha":"cccccccccccccccccccccccccccccccccccccccc"}}]\n' "$tag"
+        else
+          printf '[{"ref":"refs/tags/%s","object":{"type":"commit","sha":"%s"}}]\n' \
+            "$tag" "$(cat "$state/tag_sha")"
+        fi
       else
         echo '[]'
       fi
     elif [[ "$1" == --paginate && "$2" == */releases\?per_page=100 ]]; then
+      [[ ! -f "$state/fail_list" ]]
       echo list-releases >> "$state/calls"
       if [[ -f "$state/list_lag" ]]; then
         remaining=$(cat "$state/list_lag")
@@ -65,8 +83,9 @@ case "$1" in
           draft=$(cat "$state/list_draft_override")
         fi
         recorded_target=$(cat "$state/release_target" 2>/dev/null || cat "$state/tag_sha" 2>/dev/null || echo '')
-        release_json=$(printf '{"tag_name":"%s","draft":%s,"target_commitish":"%s"}' \
-          "$tag" "$draft" "$recorded_target")
+        release_id=$(cat "$state/release_id" 2>/dev/null || echo 1)
+        release_json=$(printf '{"id":%s,"tag_name":"%s","draft":%s,"target_commitish":"%s"}' \
+          "$release_id" "$tag" "$draft" "$recorded_target")
         if [[ -f "$state/list_duplicate" ]]; then
           printf '[%s,%s]\n' "$release_json" "$release_json"
         else
@@ -115,6 +134,17 @@ case "$1" in
         fi
         printf published > "$state/release_state"
         echo publish-release >> "$state/calls"
+        for field in tag_sha release_target release_id; do
+          if [[ -f "$state/change_$field" ]]; then
+            cp "$state/change_$field" "$state/$field"
+          fi
+        done
+        if [[ -f "$state/duplicate_after_edit" ]]; then
+          touch "$state/list_duplicate"
+        fi
+        if [[ -f "$state/draft_after_edit" ]]; then
+          printf draft > "$state/release_state"
+        fi
         ;;
       *) echo "Unexpected gh release: $*" >&2; exit 1 ;;
     esac
@@ -138,6 +168,12 @@ export TAG=v1.2.3
 export TARGET_SHA=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 export RUN_SHA=$TARGET_SHA
 export DRAFT=true
+export RESUME=false
+export COMMIT_MESSAGE_PREFIX='chore(release):'
+export RUN_EVENT_NAME=workflow_dispatch
+export RUN_REF=refs/heads/main
+export RUN_REF_PROTECTED=true
+export DEFAULT_BRANCH=main
 : > "$GITHUB_OUTPUT"
 
 reset_state() {
@@ -291,5 +327,127 @@ if run_publish 2>/dev/null; then
   exit 1
 fi
 assert_count sleep 0
+
+# 修正後の手動実行から、元の draft の公開を再開できる。
+prepare_resume() { reset_state; run_publish; }
+run_resume() { RESUME=true RUN_SHA=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb run_finalize; }
+expect_resume_failure() {
+  if run_resume > "$test_dir/resume-error" 2>&1; then
+    echo '拒否すべき再開が成功しました' >&2
+    exit 1
+  fi
+  assert_count publish-release 0
+}
+
+for subject in 'chore(release): v1.2.3' 'chore(release): v1.2.3 (#42)'; do
+  prepare_resume
+  printf '%s' "$subject" > "$MOCK_STATE/subject"
+  run_resume
+  run_resume
+  assert_count publish-release 1
+  grep -q '^release_state=published$' "$GITHUB_OUTPUT"
+done
+
+# 通常経路には再開専用の手動実行・保護ブランチ条件を課さない。
+prepare_resume
+RUN_EVENT_NAME=push RUN_REF_PROTECTED=false DEFAULT_BRANCH='' run_finalize
+assert_count publish-release 1
+
+prepare_resume
+printf identical > "$MOCK_STATE/comparison_status"
+RESUME=true run_finalize
+assert_count publish-release 1
+
+prepare_resume
+touch "$MOCK_STATE/annotated_tag"
+run_resume
+run_resume
+assert_count publish-release 1
+
+prepare_resume
+printf 'release: v1.2.3' > "$MOCK_STATE/subject"
+COMMIT_MESSAGE_PREFIX=release: run_resume
+assert_count publish-release 1
+
+# 手動実行・保護された既定ブランチ以外からの再開を拒否する。
+for event in push pull_request workflow_call; do
+  prepare_resume
+  RUN_EVENT_NAME=$event expect_resume_failure
+done
+for ref in refs/heads/feature refs/tags/v1.2.3 refs/pull/1/merge; do
+  prepare_resume
+  RUN_REF=$ref expect_resume_failure
+done
+prepare_resume
+RUN_REF_PROTECTED=false expect_resume_failure
+prepare_resume
+DEFAULT_BRANCH='' expect_resume_failure
+prepare_resume
+if RESUME=true RUN_SHA=invalid run_finalize > "$test_dir/resume-error" 2>&1; then
+  echo '不正な実行 SHA が受け付けられました' >&2
+  exit 1
+fi
+assert_count publish-release 0
+
+for tag in v1.2 invalid-tag; do
+  prepare_resume
+  TAG=$tag expect_resume_failure
+done
+
+# 非祖先・別コミット・不正なコミット件名・取得エラーで公開しない。
+for status in behind diverged unknown; do
+  prepare_resume
+  printf '%s' "$status" > "$MOCK_STATE/comparison_status"
+  expect_resume_failure
+done
+for field in merge_base commit_sha tag_sha; do
+  prepare_resume
+  printf bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb > "$MOCK_STATE/$field"
+  expect_resume_failure
+done
+for subject in 'fix: v1.2.3' 'chore(release): v1.2.4' 'chore(release): v1.2.30' \
+  'chore(release): v1.2.3 unexpected' 'chore(release): v1.2.3 (#abc)'; do
+  prepare_resume
+  printf '%s' "$subject" > "$MOCK_STATE/subject"
+  expect_resume_failure
+done
+prepare_resume
+COMMIT_MESSAGE_PREFIX='' expect_resume_failure
+for failure in fail_compare fail_commit fail_list list_duplicate; do
+  prepare_resume
+  touch "$MOCK_STATE/$failure"
+  expect_resume_failure
+done
+for target in bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb main ''; do
+  prepare_resume
+  printf '%s' "$target" > "$MOCK_STATE/release_target"
+  expect_resume_failure
+done
+prepare_resume
+printf null > "$MOCK_STATE/list_draft_override"
+expect_resume_failure
+
+# 公開後のタグ・記録 SHA・Release 置換・状態不整合も検出する。
+for field in tag_sha release_target release_id; do
+  prepare_resume
+  if [[ "$field" == release_id ]]; then
+    printf 2 > "$MOCK_STATE/change_$field"
+  else
+    printf bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb > "$MOCK_STATE/change_$field"
+  fi
+  if run_resume > "$test_dir/resume-error" 2>&1; then
+    echo "公開後の $field 変更を見落としました" >&2
+    exit 1
+  fi
+  assert_count publish-release 1
+done
+for failure in duplicate_after_edit draft_after_edit; do
+  prepare_resume
+  touch "$MOCK_STATE/$failure"
+  if run_resume > "$test_dir/resume-error" 2>&1; then
+    echo "公開後の $failure を見落としました" >&2
+    exit 1
+  fi
+done
 
 echo 'Release workflow scenarios passed'

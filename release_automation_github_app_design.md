@@ -187,8 +187,14 @@ GitHub の鍵ローテーション手順は[公式ドキュメント](https://do
 | :--- | :--- | :--- |
 | `tag_name` | string | publish workflow の同名出力 |
 | `target_sha` | string | publish workflow の同名出力 |
+| `resume` | boolean | 既定 false。true は保護された既定ブランチの手動実行から既存 draft の公開を再開 |
+| `commit_message_prefix` | string | 既定 `chore(release):`。再開時に確認する対象コミットの接頭辞（publish と同じ値） |
 
 `contents: write` を持つ finalize job は、同じ caller run の `github.sha`、タグの解決先 SHA、Release の draft 状態を確認して公開する。公開に成功したが後続確認に失敗した場合も、同じ run の再実行では公開済み状態を無変更で確認できる。利用側は成果物を Release から再取得・検証する job を置き、その成功を `needs` で finalize の前提にする。タグ push イベントから別 workflow を起動しない。caller の具体例は [README](README.md#draft-作成後に成果物を検証して公開する場合) を参照。
+
+`resume: true` は `workflow_dispatch` かつ `github.ref` が保護された既定ブランチである場合だけ許可する。compare API で固定 `target_sha` と実行 SHA の同一・祖先関係を確認し、対象コミット件名が指定接頭辞とタグに一致することを検査する。件名の末尾は Squash merge の PR 番号のみ許容する。再開では Release の `target_commitish` を対象 SHA と完全一致させ、branch 名や不明値を代替として受けない。通常経路の同一 SHA 契約と既存 concurrency は維持する。
+
+公開後は Release の ID・記録対象・タグ・状態を再確認し、置換や不整合を検出する。既存の公開済み同一対象は変更しない。修正後の caller は元の Release の成果物を再取得・再検証し、同じ run の `needs` で再開 finalize に接続する（[再開 caller 例](README.md#caller-の修正後に既存-draft-の公開を再開する場合)）。この入力は成果物検証の代替にも、write 権限者から caller を保護する認可境界にもならない。
 
 ---
 

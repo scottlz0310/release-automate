@@ -11,6 +11,16 @@ on:
         description: 'Commit SHA returned by reusable-publish-release.yml'
         required: true
         type: string
+      resume:
+        description: '保護された既定ブランチの手動実行から既存 draft の公開を再開する'
+        required: false
+        type: boolean
+        default: false
+      commit_message_prefix:
+        description: '再開時に確認するリリースコミット件名の接頭辞（publish と同じ値）'
+        required: false
+        type: string
+        default: 'chore(release):'
     outputs:
       release_state:
         description: 'published after successful finalization'
@@ -34,11 +44,49 @@ jobs:
           TAG: ${{ inputs.tag_name }}
           TARGET_SHA: ${{ inputs.target_sha }}
           RUN_SHA: ${{ github.sha }}
+          RESUME: ${{ inputs.resume }}
+          COMMIT_MESSAGE_PREFIX: ${{ inputs.commit_message_prefix }}
+          RUN_EVENT_NAME: ${{ github.event_name }}
+          RUN_REF: ${{ github.ref }}
+          RUN_REF_PROTECTED: ${{ github.ref_protected }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           set -euo pipefail
 
           if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ||
-                ! "$TARGET_SHA" =~ ^[0-9a-f]{40}$ || "$TARGET_SHA" != "$RUN_SHA" ]]; then
+                ! "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo '::error::Release tag or target SHA does not match this workflow run'
+            exit 1
+          fi
+
+          if [[ "$RESUME" == true ]]; then
+            if [[ "$RUN_EVENT_NAME" != workflow_dispatch || -z "$DEFAULT_BRANCH" ||
+                  "$RUN_REF" != "refs/heads/$DEFAULT_BRANCH" || "$RUN_REF_PROTECTED" != true ||
+                  ! "$RUN_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+              echo '::error::再開は保護された既定ブランチの workflow_dispatch 実行に限定します'
+              exit 1
+            fi
+            comparison=$(gh api "repos/$GITHUB_REPOSITORY/compare/$TARGET_SHA...$RUN_SHA")
+            if ! jq -e --arg target "$TARGET_SHA" \
+              '(.status == "ahead" or .status == "identical") and .merge_base_commit.sha == $target' \
+              <<< "$comparison" > /dev/null; then
+              echo '::error::再開対象は実行コミットと同一またはその祖先である必要があります'
+              exit 1
+            fi
+            target_commit=$(gh api "repos/$GITHUB_REPOSITORY/commits/$TARGET_SHA")
+            subject=$(jq -r '.commit.message | split("\n")[0]' <<< "$target_commit")
+            release_subject="$COMMIT_MESSAGE_PREFIX $TAG"
+            if [[ $(jq -r '.sha' <<< "$target_commit") != "$TARGET_SHA" ||
+                  -z "$COMMIT_MESSAGE_PREFIX" || "$subject" != "$release_subject"* ]]; then
+              echo '::error::再開対象は指定した接頭辞とタグ版に一致するリリースコミットである必要があります'
+              exit 1
+            fi
+            suffix=${subject#"$release_subject"}
+            if [[ -n "$suffix" && ! "$suffix" =~ ^\ \(\#[0-9]+\)$ ]]; then
+              echo '::error::リリースコミット件名の末尾には Squash merge の PR 番号だけを許可します'
+              exit 1
+            fi
+          elif [[ "$TARGET_SHA" != "$RUN_SHA" ]]; then
             echo '::error::Release tag or target SHA does not match this workflow run'
             exit 1
           fi
@@ -70,7 +118,8 @@ jobs:
           fi
           release_json=$(jq -c '.[0]' <<< "$releases")
           recorded_target=$(jq -r '.target_commitish // ""' <<< "$release_json")
-          if [[ "$recorded_target" =~ ^[0-9a-f]{40}$ && "$recorded_target" != "$TARGET_SHA" ]]; then
+          if [[ ( "$RESUME" == true || "$recorded_target" =~ ^[0-9a-f]{40}$ ) &&
+                "$recorded_target" != "$TARGET_SHA" ]]; then
             echo "::error::Release $TAG records a different target SHA: $recorded_target"
             exit 1
           fi
@@ -100,7 +149,9 @@ jobs:
           done
           if [[ $(jq -r '.tag_name' <<< "$confirmed_release") != "$TAG" ||
                 $(jq -r '.draft' <<< "$confirmed_release") != false ||
-                "$confirmed_type" != commit || "$confirmed_sha" != "$TARGET_SHA" ]]; then
+                "$confirmed_type" != commit || "$confirmed_sha" != "$TARGET_SHA" ||
+                $(jq -r '.id' <<< "$confirmed_release") != "$(jq -r '.id' <<< "$release_json")" ||
+                $(jq -r '.target_commitish // ""' <<< "$confirmed_release") != "$recorded_target" ]]; then
             echo "::error::Release $TAG did not reach the expected published state or its tag changed"
             exit 1
           fi
