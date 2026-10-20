@@ -151,6 +151,8 @@ jobs:
 
 以下の `build-and-upload-release-assets.sh` と `verify-release-assets.sh` は利用側が実装するスクリプトの例です。前者は draft Release に成果物を添付し、後者は Release から成果物を再取得して必要な名前・種類・checksum・内容を検証します。後者が失敗すると `finalize` は実行されません。
 
+draft Release を読むジョブは、読み取りだけを行う場合も `GITHUB_TOKEN` に `contents: write` が必要です（[draft の一覧取得には push 権限が必要](https://docs.github.com/en/rest/releases/releases#list-releases)）。reusable workflow を呼ぶ場合は、呼び出し元のジョブにも必要な `permissions` を指定してください。呼び出し先で呼び出し元の権限を引き上げることはできません（[reusable workflow の権限制約](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows#nesting-reusable-workflows)）。
+
 ```yaml
 name: Publish Release After Verification
 
@@ -184,7 +186,8 @@ jobs:
     if: needs.draft.outputs.release_state == 'draft'
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      # 読み取りだけでも、draft Release の取得には push 権限が必要。
+      contents: write
     steps:
       - uses: actions/checkout@<固定コミットSHA>
       - env:
@@ -204,5 +207,7 @@ jobs:
 ```
 
 `<固定コミットSHA>` はこの 2 つの reusable workflow を含む `release-automate` の同一コミット、および利用側で採用する checkout のコミットに置き換えます。`@v1` は finalize workflow を含まないため、段階的公開には v2 以降を使用します。タグは `GITHUB_TOKEN` で作るため、タグ push を起点とする別 workflow に依存せず、この caller の `needs` で接続してください。
+
+checkout しないジョブで `gh` を使う場合は、[`GH_REPO`](https://cli.github.com/manual/gh_help_environment) に `${{ github.repository }}` を設定するか、`--repo owner/repo` で対象を指定してください。`GITHUB_REPOSITORY` だけでは `gh` の対象リポジトリは指定されません。
 
 再実行では、同じ SHA の draft は再利用されます。添付ジョブは既存 asset を確認して重複添付を避け、検証ジョブは毎回 Release 上の asset を確認してください。公開失敗後は同じ run を再実行できます。異なる SHA の既存タグは失敗し、公開済み Release は再実行でも変更されません。`release_state` が `published` の再実行では添付・検証・公開ジョブをスキップします。

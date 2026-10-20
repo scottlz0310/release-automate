@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- README の draft 検証ジョブの権限を `contents: write` に修正し、draft の読み取り・reusable workflow 呼び出し元の権限と checkout なしでの `gh` の対象指定を説明（#30）。
+
 ## [2.1.0] - 2026-10-04
 
 ### Added
