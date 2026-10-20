@@ -77,6 +77,14 @@ v3 の prepare workflow は `RELEASE_BOT_CLIENT_ID` を必須とし、旧 `RELEA
    - `pre-commit`: ワークフロー定義ファイル（`.github/workflows/*.yml`）変更時に `actionlint` で構文チェック
    - `pre-push`: プッシュ前に Pester テストを自動実行
 
+### actionlint の一時除外の追跡
+
+CI は通常の actionlint に加え、同じ `uses` 宣言の固定 Docker イメージで除外なしの検査を行います。`ci.yml` の Ubuntu 26.04 未認識診断だけなら継続し、診断がなくなれば撤去を促して失敗します。他の診断・実行障害・解析できない出力も失敗として扱います。
+
+[Issue #39](https://github.com/scottlz0310/release-automate/issues/39) は検知導入後も閉じず、2026-11-20（日本時間）に上流を再評価します。対応版への更新後、`.github/actionlint.yaml` の対象除外、CI の専用確認ステップ、`scripts/check-actionlint-workaround.sh`、`tests/actionlint-workaround.sh` とその CI 呼び出しを同じ PR で撤去し、除外なしの lint と関連 CI の成功を確認します。
+
+判定のモックは `bash tests/actionlint-workaround.sh` で実行できます。CLI は引数で差し替え、実行結果・構造化診断の分類を検証します。
+
 ### 鍵管理スクリプトのテスト
 
 Windows の PowerShell 7.4 以降で Pester 6.2.0 を使います。テストでは一時的に生成した鍵と模擬 CLI を使い、実際の Bitwarden Vault と GitHub Secrets には接続しません。
