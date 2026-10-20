@@ -27,24 +27,36 @@ GitHub Organization (`scottlz0310`) 向けのリリース自動化 Reusable Work
 
 ## GitHub App のセットアップと鍵管理
 
+以下は v3 向けの認証契約です。v3 は公開準備中のため、公開前に試す場合はレビュー済みの対応コミット SHA を指定してください。既存の `@v2` 利用者は後述の移行手順で切り替えます。
+
 セットアップの全手順、初回登録、鍵ローテーションは [設計・運用手順書](release_automation_github_app_design.md) を参照してください。スクリプトは Windows の PowerShell 7.4 以降で実行します。
 
-1. GitHub App を作成します。
+1. GitHub App を作成し、設定画面の数値の **App ID** と、認証用の **Client ID** を控えます。鍵バックアップの識別には App ID、workflow の認証には Client ID を使います。
 2. GitHub App 設定画面から秘密鍵 PEM を生成・ダウンロードし、表示された GitHub fingerprint を控えます。
 3. `scripts/backup-release-bot-key.ps1` を実行します。`bw` があれば fingerprint ごとの Bitwarden Secure Note に保存し、`bw` がなければ DPAPI で暗号化したファイルを `%LOCALAPPDATA%` 配下に保存します。バックアップ後もダウンロードファイルは残ります。
 4. `scripts/verify-release-bot-key.ps1 -PemPath <ダウンロードした PEM> -ExpectedFingerprint <GitHub fingerprint>` でバックアップを復号し、PEM と GitHub fingerprint の両方を照合します。DPAPI 保存先を使う場合は、バックアップ時に表示されたパスを `-BackupPath` に指定してください。照合成功後、ダウンロードファイルを削除するか `y/N` で選べます。
-5. GitHub App を Organization `scottlz0310` の All repositories にインストールし、`scripts/set-release-bot-secrets.ps1 -Fingerprint <SHA256 fingerprint>` を実行します。確認プロンプトに同意すると、Actions secrets `RELEASE_BOT_PRIVATE_KEY` と `RELEASE_BOT_APP_ID` が全リポジトリ向けに作成または更新されます。Bitwarden がない環境では `-BackupPath <DPAPI バックアップ>` も指定します。
+5. GitHub App を Organization `scottlz0310` の All repositories にインストールし、`scripts/set-release-bot-secrets.ps1 -Fingerprint <SHA256 fingerprint> -ClientId <GitHub App の Client ID>` を実行します。確認プロンプトに同意すると、Actions secrets `RELEASE_BOT_PRIVATE_KEY` と `RELEASE_BOT_CLIENT_ID` が全リポジトリ向けに作成または更新されます。Bitwarden がない環境では `-BackupPath <DPAPI バックアップ>` も指定します。
 
 ```powershell
 $pem = "$env:USERPROFILE\Downloads\scottlz0310-release-bot.private-key.pem"
 pwsh ./scripts/backup-release-bot-key.ps1 -PemPath $pem -AppId 5074929
 pwsh ./scripts/verify-release-bot-key.ps1 -PemPath $pem -ExpectedFingerprint 'SHA256:<GitHub settings の fingerprint>'
-pwsh ./scripts/set-release-bot-secrets.ps1 -Fingerprint 'SHA256:<backup が表示した fingerprint>'
+pwsh ./scripts/set-release-bot-secrets.ps1 -Fingerprint 'SHA256:<backup が表示した fingerprint>' -ClientId '<GitHub App の Client ID>'
 ```
 
 Bitwarden CLI がない場合は、バックアップ時に表示された DPAPI ファイルのパスを照合・登録コマンドの `-BackupPath` に指定します。DPAPI ファイルは作成した Windows ユーザーのプロファイルに依存し、別ユーザーや別 PC では復号できません。Bitwarden が利用可能なら Vault を主バックアップとして使ってください。
 
-鍵ローテーションでは、新鍵を生成して同じバックアップ・照合を行い、`scripts/rotate-release-bot-key.ps1` を実行します。新鍵でワークフローが成功するまで旧鍵は GitHub App 設定から削除しません。スクリプトは GitHub App の鍵自体を削除しません。
+鍵ローテーションでは、新鍵を生成して同じバックアップ・照合を行い、`scripts/rotate-release-bot-key.ps1 -Fingerprint <SHA256 fingerprint> -ClientId <GitHub App の Client ID>` を実行します。新鍵でワークフローが成功するまで旧鍵は GitHub App 設定から削除しません。スクリプトは GitHub App の鍵自体を削除しません。
+
+### v2 から v3 への認証移行
+
+v3 の prepare workflow は `RELEASE_BOT_CLIENT_ID` を必須とし、旧 `RELEASE_BOT_APP_ID` への代替は行いません。[GitHub は JWT の発行元に Client ID を推奨](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-json-web-token-jwt-for-a-github-app)しています。数値 App ID の secret を改名するだけでは移行になりません。
+
+1. App 設定の Client ID を確認し、上記スクリプトで `RELEASE_BOT_CLIENT_ID` を登録します。秘密鍵は既存バックアップをそのまま使えます。既定以外の App ID で作成したバックアップは `-AppId` も指定します。
+2. v3 公開後、caller の参照を v3 の固定コミット SHA（または `@v3`）に切り替えます。`secrets: inherit` は維持でき、個別指定の場合は `RELEASE_BOT_CLIENT_ID: ${{ secrets.RELEASE_BOT_CLIENT_ID }}` と既存の秘密鍵を渡します。
+3. caller の prepare が成功することを確認します。`RELEASE_BOT_PRIVATE_KEY` は v2 と共通で、既存の App ID を持つ鍵バックアップの形式も変わりません。
+
+登録・ローテーションスクリプトは旧 `RELEASE_BOT_APP_ID` を更新・削除しません。旧 v2 caller が残る間は旧 secret を保持し、撤去は全 caller の移行確認後に別途判断します。Client ID の登録、caller の変更、v3 の公開はそれぞれ運用時に実施する作業です。
 
 ### 開発セットアップと品質ゲート（Lefthook）
 
@@ -97,7 +109,7 @@ on:
 
 jobs:
   prepare:
-    uses: scottlz0310/release-automate/.github/workflows/reusable-prepare-release.yml@v2
+    uses: scottlz0310/release-automate/.github/workflows/reusable-prepare-release.yml@v3
     secrets: inherit
     with:
       target_version: ${{ inputs.target_version }}

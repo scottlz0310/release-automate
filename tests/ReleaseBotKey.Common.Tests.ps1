@@ -297,7 +297,7 @@ Describe 'Organization Actions secrets' {
         Mock Invoke-ReleaseBotProcess -ModuleName ReleaseBotKey.Common {
             $global:releaseBotProcessCalls.Add([pscustomobject]@{ Arguments = $Arguments; InputText = $InputText })
             if ($Arguments[0] -eq 'secret' -and $Arguments[1] -eq 'list') {
-                return '[{"name":"RELEASE_BOT_PRIVATE_KEY","visibility":"all"},{"name":"RELEASE_BOT_APP_ID","visibility":"all"}]'
+                return '[{"name":"RELEASE_BOT_PRIVATE_KEY","visibility":"all"},{"name":"RELEASE_BOT_CLIENT_ID","visibility":"all"}]'
             }
             return ''
         }
@@ -308,25 +308,31 @@ Describe 'Organization Actions secrets' {
     }
 
     It 'sends both values over stdin and verifies all-repository visibility' {
-        Set-ReleaseBotOrganizationSecrets -Pem $pem -AppId '123' -Fingerprint $fingerprint -Confirm:$false
+        Set-ReleaseBotOrganizationSecrets -Pem $pem -ClientId 'Iv1.example' -Fingerprint $fingerprint -Confirm:$false
         $setCalls = @($global:releaseBotProcessCalls | Where-Object { $_.Arguments[0] -eq 'secret' -and $_.Arguments[1] -eq 'set' })
         $setCalls.Count | Should -Be 2
         $setCalls[0].Arguments | Should -Be @('secret', 'set', 'RELEASE_BOT_PRIVATE_KEY', '--org', 'scottlz0310', '--visibility', 'all', '--app', 'actions')
         $setCalls[0].InputText | Should -BeExactly $pem
-        $setCalls[1].Arguments | Should -Be @('secret', 'set', 'RELEASE_BOT_APP_ID', '--org', 'scottlz0310', '--visibility', 'all', '--app', 'actions')
-        $setCalls[1].InputText | Should -BeExactly "123`n"
+        $setCalls[1].Arguments | Should -Be @('secret', 'set', 'RELEASE_BOT_CLIENT_ID', '--org', 'scottlz0310', '--visibility', 'all', '--app', 'actions')
+        $setCalls[1].InputText | Should -BeExactly "Iv1.example`n"
         @($global:releaseBotProcessCalls | Where-Object { $_.Arguments[0] -eq 'secret' -and $_.Arguments[1] -eq 'list' }).Count |
             Should -Be 1
     }
 
-    It 'throws when either secret is not visible to all repositories' {
+    It '必要な secret の欠落・公開範囲の不一致・旧 App ID のみの設定を拒否する' -ForEach @(
+        @{ SecretList = '[{"name":"RELEASE_BOT_PRIVATE_KEY","visibility":"private"},{"name":"RELEASE_BOT_CLIENT_ID","visibility":"all"}]' }
+        @{ SecretList = '[{"name":"RELEASE_BOT_PRIVATE_KEY","visibility":"all"},{"name":"RELEASE_BOT_CLIENT_ID","visibility":"private"}]' }
+        @{ SecretList = '[{"name":"RELEASE_BOT_CLIENT_ID","visibility":"all"}]' }
+        @{ SecretList = '[{"name":"RELEASE_BOT_PRIVATE_KEY","visibility":"all"},{"name":"RELEASE_BOT_APP_ID","visibility":"all"}]' }
+    ) {
+        $response = $SecretList
         Mock Invoke-ReleaseBotProcess -ModuleName ReleaseBotKey.Common {
             if ($Arguments[0] -eq 'secret' -and $Arguments[1] -eq 'list') {
-                return '[{"name":"RELEASE_BOT_PRIVATE_KEY","visibility":"private"},{"name":"RELEASE_BOT_APP_ID","visibility":"all"}]'
+                return $response
             }
             return ''
         }
-        $failure = { Set-ReleaseBotOrganizationSecrets -Pem $pem -AppId '123' -Fingerprint $fingerprint -Confirm:$false } |
+        $failure = { Set-ReleaseBotOrganizationSecrets -Pem $pem -ClientId 'Iv1.example' -Fingerprint $fingerprint -Confirm:$false } |
             Should -Throw -PassThru
         $failure.Exception.Message | Should -Not -Match ([regex]::Escape($pem.Substring(0, 80)))
     }

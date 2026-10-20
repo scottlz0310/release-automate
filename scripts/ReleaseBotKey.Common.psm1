@@ -541,7 +541,7 @@ function Set-ReleaseBotOrganizationSecrets {
     [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'High')]
     param(
         [Parameter(Mandatory = $true)][string]$Pem,
-        [Parameter(Mandatory = $true)][string]$AppId,
+        [Parameter(Mandatory = $true)][ValidateNotNullOrEmpty()][string]$ClientId,
         [Parameter(Mandatory = $true)][string]$Fingerprint
     )
 
@@ -550,7 +550,7 @@ function Set-ReleaseBotOrganizationSecrets {
         throw 'GitHub CLI (gh) is not available.'
     }
     $null = Invoke-ReleaseBotProcess -FilePath $ghPath -Arguments @('auth', 'status', '--hostname', 'github.com') -InputText $null
-    $target = "Organization $($script:ReleaseBotOrganization) Actions secrets RELEASE_BOT_PRIVATE_KEY and RELEASE_BOT_APP_ID (all repositories)"
+    $target = "Organization $($script:ReleaseBotOrganization) Actions secrets RELEASE_BOT_PRIVATE_KEY and RELEASE_BOT_CLIENT_ID (all repositories)"
     if (-not $PSCmdlet.ShouldProcess($target, 'Create or update')) {
         return
     }
@@ -560,20 +560,20 @@ function Set-ReleaseBotOrganizationSecrets {
         '--visibility', 'all', '--app', 'actions'
     ) -InputText $Pem
     $null = Invoke-ReleaseBotProcess -FilePath $ghPath -Arguments @(
-        'secret', 'set', 'RELEASE_BOT_APP_ID', '--org', $script:ReleaseBotOrganization,
+        'secret', 'set', 'RELEASE_BOT_CLIENT_ID', '--org', $script:ReleaseBotOrganization,
         '--visibility', 'all', '--app', 'actions'
-    ) -InputText "$AppId`n"
+    ) -InputText "$ClientId`n"
 
     $verificationJson = Invoke-ReleaseBotProcess -FilePath $ghPath -Arguments @(
         'secret', 'list', '--org', $script:ReleaseBotOrganization, '--app', 'actions', '--json', 'name,visibility'
     ) -InputText $null
     $secrets = @(ConvertFrom-Json -InputObject $verificationJson -ErrorAction Stop)
     $keySecret = @($secrets | Where-Object { $_.name -ceq 'RELEASE_BOT_PRIVATE_KEY' })
-    $appIdSecret = @($secrets | Where-Object { $_.name -ceq 'RELEASE_BOT_APP_ID' })
+    $clientIdSecret = @($secrets | Where-Object { $_.name -ceq 'RELEASE_BOT_CLIENT_ID' })
     $verificationJson = $null
     $secrets = $null
     if ($keySecret.Count -ne 1 -or $keySecret[0].visibility -cne 'all' -or
-        $appIdSecret.Count -ne 1 -or $appIdSecret[0].visibility -cne 'all') {
+        $clientIdSecret.Count -ne 1 -or $clientIdSecret[0].visibility -cne 'all') {
         throw 'The organization Actions secrets were not verified with all-repository visibility.'
     }
     Write-Host "Organization Actions secrets are present with all-repository visibility. Fingerprint: $(Format-ReleaseBotFingerprint -Value $Fingerprint)"

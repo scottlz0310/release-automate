@@ -13,6 +13,10 @@ param(
     [ValidateNotNullOrEmpty()]
     [string]$Fingerprint,
 
+    [Parameter(Mandatory = $true)]
+    [ValidateNotNullOrEmpty()]
+    [string]$ClientId,
+
     [string]$BackupPath,
 
     [ValidatePattern('^[0-9]+$')]
@@ -22,6 +26,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $arguments = @{
     Fingerprint = $Fingerprint
+    ClientId = $ClientId
     AppId = $AppId
 }
 if (-not [string]::IsNullOrWhiteSpace($BackupPath)) {

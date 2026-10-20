@@ -79,22 +79,49 @@ Describe 'Secret setup and rotation scripts' {
     }
 
     It 'passes an unprefixed fingerprint to secret setup' {
-        & (Join-Path $scripts 'set-release-bot-secrets.ps1') -Fingerprint "SHA256:$fingerprint" -BackupPath 'fake.dpapi.json' -AppId '123'
+        & (Join-Path $scripts 'set-release-bot-secrets.ps1') -Fingerprint "SHA256:$fingerprint" -ClientId 'Iv1.example' -BackupPath 'fake.dpapi.json' -AppId '123'
         Should -Invoke Set-ReleaseBotOrganizationSecrets -Times 1 -ParameterFilter {
-            $AppId -eq '123' -and $Fingerprint -eq $fingerprint -and $Pem -eq $pem
+            $ClientId -eq 'Iv1.example' -and $Fingerprint -eq $fingerprint -and $Pem -eq $pem
+        }
+        Should -Invoke Get-ReleaseBotBackup -Times 1 -ParameterFilter {
+            $AppId -eq '123' -and $BackupPath -eq 'fake.dpapi.json'
         }
     }
 
     It 'routes rotation through the same secret setup path' {
-        & (Join-Path $scripts 'rotate-release-bot-key.ps1') -Fingerprint "SHA256:$fingerprint" -BackupPath 'fake.dpapi.json' -AppId '123'
+        & (Join-Path $scripts 'rotate-release-bot-key.ps1') -Fingerprint "SHA256:$fingerprint" -ClientId 'Iv1.example' -BackupPath 'fake.dpapi.json' -AppId '123'
         Should -Invoke Set-ReleaseBotOrganizationSecrets -Times 1 -ParameterFilter {
-            $AppId -eq '123' -and $Fingerprint -eq $fingerprint -and $Pem -eq $pem
+            $ClientId -eq 'Iv1.example' -and $Fingerprint -eq $fingerprint -and $Pem -eq $pem
         }
+        Should -Invoke Get-ReleaseBotBackup -Times 1 -ParameterFilter {
+            $AppId -eq '123' -and $BackupPath -eq 'fake.dpapi.json'
+        }
+    }
+
+    It 'ClientId が空なら鍵の読み出し前に拒否する' -ForEach @(
+        @{ ScriptName = 'set-release-bot-secrets.ps1'; ClientId = '' }
+        @{ ScriptName = 'set-release-bot-secrets.ps1'; ClientId = $null }
+        @{ ScriptName = 'rotate-release-bot-key.ps1'; ClientId = '' }
+        @{ ScriptName = 'rotate-release-bot-key.ps1'; ClientId = $null }
+    ) {
+        { & (Join-Path $scripts $ScriptName) -Fingerprint "SHA256:$fingerprint" -ClientId $ClientId } |
+            Should -Throw '*ClientId*'
+        Should -Invoke Get-ReleaseBotBackup -Times 0
+        Should -Invoke Set-ReleaseBotOrganizationSecrets -Times 0
+    }
+
+    It '非対話実行で ClientId を省略すると失敗する' -ForEach @(
+        @{ ScriptName = 'set-release-bot-secrets.ps1' }
+        @{ ScriptName = 'rotate-release-bot-key.ps1' }
+    ) {
+        $output = & (Join-Path $PSHOME 'pwsh.exe') -NoProfile -NonInteractive -File (Join-Path $scripts $ScriptName) -Fingerprint 'invalid-fingerprint' 2>&1 | Out-String
+        $LASTEXITCODE | Should -Not -Be 0
+        $output | Should -Match 'ClientId'
     }
 
     It 'does not include a restored PEM in a secret setup failure' {
         Mock Set-ReleaseBotOrganizationSecrets { throw 'Synthetic gh failure.' }
-        $failure = { & (Join-Path $scripts 'set-release-bot-secrets.ps1') -Fingerprint "SHA256:$fingerprint" -BackupPath 'fake.dpapi.json' -AppId '123' } |
+        $failure = { & (Join-Path $scripts 'set-release-bot-secrets.ps1') -Fingerprint "SHA256:$fingerprint" -ClientId 'Iv1.example' -BackupPath 'fake.dpapi.json' -AppId '123' } |
             Should -Throw -PassThru
         $failure.Exception.Message | Should -Match 'github-secrets.*Synthetic gh failure'
         $failure.Exception.Message | Should -Not -Match ([regex]::Escape($pem.Substring(0, 80)))
