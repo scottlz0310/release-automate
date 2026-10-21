@@ -1,0 +1,94 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: '修正後の既定ブランチから再開する既存タグ（例: v3.1.0）'
+        required: true
+        type: string
+      target_sha:
+        description: '元のリリースコミットの完全 SHA'
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: self-release-${{ github.repository }}-${{ github.event_name == 'workflow_dispatch' || startsWith(github.event.head_commit.message, 'chore(release):') }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.head_commit.message, 'chore(release):')
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      tag_name: ${{ steps.preflight.outputs.tag_name }}
+      target_sha: ${{ steps.preflight.outputs.target_sha }}
+      expected_major_sha: ${{ steps.preflight.outputs.expected_major_sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: 公開対象とメジャータグを確認
+        id: preflight
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          REF_PROTECTED: ${{ github.ref_protected }}
+          TARGET_SHA: ${{ inputs.target_sha || github.sha }}
+          REQUESTED_TAG: ${{ inputs.tag_name }}
+        run: bash scripts/self-release.sh preflight
+      - name: 公開対象 SHA の CI 成功を待つ
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TARGET_SHA: ${{ steps.preflight.outputs.target_sha }}
+        run: bash scripts/self-release.sh wait-ci
+
+  draft:
+    needs: verify
+    if: github.event_name == 'push'
+    uses: scottlz0310/release-automate/.github/workflows/reusable-publish-release.yml@8316ef8dcb43986ebc00c0b6b3d85b1cc752385f # v3.0.0
+    permissions:
+      contents: write
+    with:
+      draft: true
+
+  finalize:
+    needs: [verify, draft]
+    if: ${{ !cancelled() && needs.verify.result == 'success' && (needs.draft.result == 'success' || (github.event_name == 'workflow_dispatch' && needs.draft.result == 'skipped')) }}
+    uses: scottlz0310/release-automate/.github/workflows/reusable-finalize-release.yml@8316ef8dcb43986ebc00c0b6b3d85b1cc752385f # v3.0.0
+    permissions:
+      contents: write
+    with:
+      tag_name: ${{ needs.verify.outputs.tag_name }}
+      target_sha: ${{ needs.verify.outputs.target_sha }}
+      resume: ${{ github.event_name == 'workflow_dispatch' }}
+
+  major-tag:
+    needs: [verify, finalize]
+    if: ${{ !cancelled() && needs.verify.result == 'success' && needs.finalize.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: 公開結果を確認してメジャータグを更新
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.verify.outputs.tag_name }}
+          TARGET_SHA: ${{ needs.verify.outputs.target_sha }}
+          EXPECTED_MAJOR_SHA: ${{ needs.verify.outputs.expected_major_sha }}
+        run: bash scripts/self-release.sh update-major

@@ -1,0 +1,36 @@
+name: Prepare Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_version:
+        description: 'リリースする安定版（例: 3.1.0）'
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 実行元と安定版を確認
+        env:
+          TARGET_VERSION: ${{ inputs.target_version }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          if [[ "$GITHUB_REF" != "refs/heads/$DEFAULT_BRANCH" ||
+                ! "$TARGET_VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo '::error::既定ブランチから、先頭に v のない安定版 MAJOR.MINOR.PATCH を指定してください'
+            exit 1
+          fi
+
+  prepare:
+    needs: validate
+    uses: scottlz0310/release-automate/.github/workflows/reusable-prepare-release.yml@8316ef8dcb43986ebc00c0b6b3d85b1cc752385f # v3.0.0
+    secrets:
+      RELEASE_BOT_CLIENT_ID: ${{ secrets.RELEASE_BOT_CLIENT_ID }}
+      RELEASE_BOT_PRIVATE_KEY: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+    with:
+      target_version: ${{ inputs.target_version }}
+      bump_strategy: none
