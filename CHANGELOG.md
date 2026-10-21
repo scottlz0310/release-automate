@@ -80,7 +80,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Aligned Organization secret names in design document with workflow implementation (`RELEASE_BOT_APP_ID`, `RELEASE_BOT_PRIVATE_KEY`).
 
 [Unreleased]: https://github.com/scottlz0310/release-automate/compare/v3.1.0...HEAD
-[3.1.0]: https://github.com/scottlz0310/release-automate/compare/v3...v3.1.0
+[3.1.0]: https://github.com/scottlz0310/release-automate/compare/v3.0.0...v3.1.0
 [3.0.0]: https://github.com/scottlz0310/release-automate/compare/v2.1.0...v3.0.0
 [2.1.0]: https://github.com/scottlz0310/release-automate/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/scottlz0310/release-automate/compare/v1.0.0...v2.0.0
