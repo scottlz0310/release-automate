@@ -42,6 +42,9 @@ jobs:
       - name: Run mocked release scenarios
         run: bash tests/release-workflows.sh
 
+      - name: 自己リリースの CI とメジャータグ更新を検証
+        run: bash tests/self-release.sh
+
       - name: Run Rust prepare scenarios
         run: bash tests/rust-prepare.sh
 
@@ -52,7 +55,7 @@ jobs:
         run: bash tests/actionlint-workaround.sh
 
       - name: Check scenario shell script
-        run: shellcheck tests/release-workflows.sh tests/rust-prepare.sh tests/tauri-prepare.sh scripts/check-actionlint-workaround.sh tests/actionlint-workaround.sh
+        run: shellcheck tests/release-workflows.sh tests/rust-prepare.sh tests/tauri-prepare.sh scripts/check-actionlint-workaround.sh tests/actionlint-workaround.sh scripts/self-release.sh tests/self-release.sh
 
   pester:
     name: Test key management (Pester)

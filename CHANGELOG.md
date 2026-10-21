@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- 自己リリース用 caller を追加。手動 prepare による準備 PR のマージ後、対象 SHA の CI 成功を確認して draft・公開・メジャータグ更新まで自動実行する。更新前 SHA の照合、古いコミットへの巻き戻し拒否、失敗時の再実行・既存 draft 再開とモック検証を含む（#42）。
+
 ## [3.0.0] - 2026-10-21
 
 ### Added

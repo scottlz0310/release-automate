@@ -99,6 +99,28 @@ PR と `main` の CI は Windows 上で JaCoCo カバレッジを生成し、OID
 
 ---
 
+## 本リポジトリの自己リリース
+
+1. 既定ブランチで `Prepare Release` を手動実行し、`target_version` に先頭の `v` を除いた安定版（例: `3.1.0`）を指定します。GitHub App によって `release/v3.1.0` の準備 PR が作成されます。`bump_strategy: none` で CHANGELOG の Unreleased を確定します。
+2. 必要な修正は準備 PR のブランチへ追加コミットします。最終 HEAD の独立レビュー・CI・未解決スレッドを確認して、明示承認後に squash merge します。件名は `chore(release): v3.1.0`（末尾の PR 番号は可）を維持します。
+3. **リリース準備 PR のマージ承認には、自動公開と対応するメジャータグ更新の承認を含みます。** マージ後の `Release` は、そのマージコミットの `CI`（push）の成功を最大30分待ち、既存 reusable workflows で固定タグ・draft Release を作成して公開します。別の公開承認や手動 finalize は挟みません。通常の main push は公開対象になりません。
+4. 公開済み Release の記録 SHA、固定タグ、Latest Release を確認した後、同じメジャー系列のタグ（例: `v3`）を更新します。更新前のタグオブジェクト SHA を照合した `--force-with-lease` を使い、検証開始後の変更は上書きしません。古いコミット・別系統への巻き戻しも拒否します。`v2` など他のメジャー系列は変更しません。
+5. `Release` run の成功と、固定タグ・メジャータグ・Release の記録 SHA の一致、および Latest Release の版・公開状態を確認します。
+
+この機能を導入する PR 自体のマージは、リリース準備 PR のマージとは異なり、公開を起動しません。実際の prepare 起動・公開を伴う動作確認は、対象版について利用者の指示を受けて行います。
+
+### 失敗時の再開
+
+- まず同じ run の `Re-run failed jobs` を使います。CI が失敗した場合はタグ・draft を作らず停止します。公開失敗時は draft を維持し、メジャータグ更新は公開成功後に限ります。公開済み・更新済みの同一対象の再実行は成功します。
+- caller の修正が必要なら修正 PR をレビュー・マージした後、保護された既定ブランチの `Release` を手動実行し、元の `tag_name` と完全な `target_sha` を指定します。元の対象 SHA の CI を再確認し、既存 Release に `resume: true` で finalize を実行します。新たなタグ・draft は作成しません。元の準備 PR への公開承認に基づく再開です。
+- 固定タグの SHA 不一致、メジャータグの並行変更、別版の Latest Release、API 障害は失敗として報告します。タグ削除・強制上書き・別バージョンでの自動再試行は行いません。公開後にメジャータグ更新だけが失敗した場合、公開は取り消されず、同じ対象の再開で更新を完了します。後続版の公開後に古い run を再実行して巻き戻すことはできません。
+
+### 自己参照の更新
+
+prepare / publish / finalize の caller は、初回は公開済み `v3.0.0` の固定 SHA `8316ef8dcb43986ebc00c0b6b3d85b1cc752385f` を参照します。ローカルの reusable workflow を直接呼ばないため、今回変更した reusable workflow は、その変更を含む版を公開して caller の固定 SHA を更新した後のリリースから自己利用されます。Renovate による参照更新も通常の PR としてレビュー・CI を通し、3つの参照をそろえます。caller の検証・メジャータグ更新処理は実行元コミットのものを使います。
+
+`bash tests/self-release.sh` は模擬 `gh` と一時ローカル Git remote を使い、CI 成否・待機・API 障害、注釈付きタグ、新しいメジャー系列、再実行、並行更新の lease 拒否、旧系列維持を検証します。実際のタグや Release は変更しません。
+
 ## 各リポジトリでの利用方法
 
 各リポジトリの `.github/workflows/` に prepare と publish の caller を配置します。成果物の添付・検証を挟む場合は、publish caller に後述のジョブを追加します。
