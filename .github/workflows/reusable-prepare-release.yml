@@ -366,8 +366,18 @@ jobs:
               ["git", "tag", "--merged", "HEAD", "--sort=-version:refname"],
               check=True, capture_output=True, text=True,
           )
-          previous_tag = next((t for t in previous.stdout.splitlines()
-                               if re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.]+)?", t)), "")
+          def semver_key(tag):
+              match = re.fullmatch(r"v([0-9]+)\.([0-9]+)\.([0-9]+)(?:-([A-Za-z0-9.]+))?", tag)
+              if match is None:
+                  return None
+              major, minor, patch = (int(match[i]) for i in (1, 2, 3))
+              prerelease = match[4]
+              identifiers = tuple((0, int(p)) if p.isdigit() else (1, p)
+                                  for p in prerelease.split(".")) if prerelease is not None else ()
+              return major, minor, patch, prerelease is None, identifiers
+
+          tags = [t for t in previous.stdout.splitlines() if semver_key(t) is not None]
+          previous_tag = max(tags, key=semver_key) if tags else ""
           version, tag = os.environ["VERSION"], os.environ["TAG_NAME"]
           repo_url = f'https://github.com/{os.environ["REPOSITORY"]}'
           today = datetime.date.today().isoformat()

@@ -23,6 +23,8 @@ mkdir "$test_dir/work" "$test_dir/bin"
 cd "$test_dir/work"
 git init -q
 git -c user.name=test -c user.email=test@example.invalid commit -qm initial --allow-empty
+git tag v1.2.2-rc.1
+git -c user.name=test -c user.email=test@example.invalid commit -qm stable --allow-empty
 git tag v1.2.2
 git tag v1
 export VERSION=1.2.3 TAG_NAME=v1.2.3 REPOSITORY=owner/repo CHANGELOG_PATH=CHANGELOG.md
@@ -74,6 +76,12 @@ ADDITIONAL_CHANGELOG_PATHS='[]' bash "$test_dir/changelog.sh"
 cmp CHANGELOG.ja.md original.md
 CHANGELOG_PATH=absent ADDITIONAL_CHANGELOG_PATHS='[]' bash "$test_dir/changelog.sh"
 git tag -d v1.2.2 > /dev/null
+git tag v1.2.2-rc.2
+git tag v1.2.2-rc.10
+fixture
+bash "$test_dir/changelog.sh"
+grep -Fq '[1.2.3]: https://github.com/owner/repo/compare/v1.2.2-rc.10...v1.2.3' CHANGELOG.md
+git tag -d v1.2.2-rc.1 v1.2.2-rc.2 v1.2.2-rc.10 > /dev/null
 fixture
 bash "$test_dir/changelog.sh"
 grep -Fq '[1.2.3]: https://github.com/owner/repo/releases/tag/v1.2.3' CHANGELOG.md
