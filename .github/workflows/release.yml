@@ -57,7 +57,7 @@ jobs:
   draft:
     needs: verify
     if: github.event_name == 'push'
-    uses: scottlz0310/release-automate/.github/workflows/reusable-publish-release.yml@8316ef8dcb43986ebc00c0b6b3d85b1cc752385f # v3.0.0
+    uses: scottlz0310/release-automate/.github/workflows/reusable-publish-release.yml@fde6d796e366b4a70d73a992a48241c03f49ee68 # v3.1.0
     permissions:
       contents: write
     with:
@@ -66,7 +66,7 @@ jobs:
   finalize:
     needs: [verify, draft]
     if: ${{ !cancelled() && needs.verify.result == 'success' && (needs.draft.result == 'success' || (github.event_name == 'workflow_dispatch' && needs.draft.result == 'skipped')) }}
-    uses: scottlz0310/release-automate/.github/workflows/reusable-finalize-release.yml@8316ef8dcb43986ebc00c0b6b3d85b1cc752385f # v3.0.0
+    uses: scottlz0310/release-automate/.github/workflows/reusable-finalize-release.yml@fde6d796e366b4a70d73a992a48241c03f49ee68 # v3.1.0
     permissions:
       contents: write
     with:
