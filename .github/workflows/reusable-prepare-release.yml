@@ -257,6 +257,10 @@ jobs:
               echo "No bump strategy specified. Skipping version file update."
               ;;
             npm)
+              if [[ "$VERSION" == *+* ]]; then
+                echo '::error::npm 戦略は build metadata を保持できないため、更新前に拒否します'
+                exit 1
+              fi
               echo "Running npm version $VERSION --no-git-tag-version"
               npm version "$VERSION" --no-git-tag-version
               ;;
@@ -285,7 +289,7 @@ jobs:
                 const fs = require("fs");
                 const filePath = process.argv[1];
                 const version = process.argv[2];
-                const baseVersion = version.split("-")[0];
+                const baseVersion = version.split(/[-+]/)[0];
 
                 let content = fs.readFileSync(filePath, "utf8");
                 let count = 0;

@@ -197,6 +197,9 @@ publish は指定した版の CHANGELOG から本文を抽出し、GitHub の自
 prerelease 識別子がある場合だけ GitHub Release を prerelease とし、build metadata 内の
 ハイフンは prerelease の判定に使いません。各 caller は必要に応じて安定版に制限できます。
 本 repo の自己リリース caller は引き続き安定版だけを受け付けます。
+`npm version` は build metadata を削除するため、npm 戦略は metadata の指定を原稿の更新前に
+明示的に拒否します。通常版・RC は使用できます。.NET の AssemblyVersion/FileVersion は
+prerelease と metadata を除いた数値版にし、Version/InformationalVersion は指定版を保持します。
 
 ### 公開後の Docker・検証の証跡
 

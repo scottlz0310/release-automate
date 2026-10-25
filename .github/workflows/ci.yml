@@ -45,6 +45,9 @@ jobs:
       - name: 多言語原稿と公開後の証跡を検証
         run: bash tests/release-adoption.sh
 
+      - name: npm と dotnet の版の契約を検証
+        run: bash tests/managed-prepare.sh
+
       - name: 自己リリースの CI とメジャータグ更新を検証
         run: bash tests/self-release.sh
 
@@ -58,7 +61,7 @@ jobs:
         run: bash tests/actionlint-workaround.sh
 
       - name: Check scenario shell script
-        run: shellcheck tests/release-workflows.sh tests/release-adoption.sh tests/rust-prepare.sh tests/tauri-prepare.sh scripts/check-actionlint-workaround.sh tests/actionlint-workaround.sh scripts/self-release.sh tests/self-release.sh
+        run: shellcheck tests/release-workflows.sh tests/release-adoption.sh tests/managed-prepare.sh tests/rust-prepare.sh tests/tauri-prepare.sh scripts/check-actionlint-workaround.sh tests/actionlint-workaround.sh scripts/self-release.sh tests/self-release.sh
 
   pester:
     name: Test key management (Pester)

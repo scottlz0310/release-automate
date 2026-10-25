@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - 導入先の既存 RC 公開を維持できるよう、prerelease タグには GitHub Release の prerelease 属性を指定する。build metadata とハイフンを保持し、CHANGELOG の版を正規表現ではなく文字列として照合する。自己リリースの安定版限定契約は維持する。
+- .NET の AssemblyVersion/FileVersion から metadata も除去し、数値版の不正を防ぐ。npm 戦略は metadata を保持できないためファイル更新前に明示的に拒否し、タグと成果物の版の食い違いを防ぐ。
 
 ## [3.1.0] - 2026-10-21
 
