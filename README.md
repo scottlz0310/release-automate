@@ -173,6 +173,65 @@ with:
 
 ### 2. `.github/workflows/publish-release.yml`
 
+### 多言語 CHANGELOG
+
+prepare の `additional_changelog_paths` に翻訳原稿の JSON 配列を指定すると、
+主原稿と同じ版・日付・比較リンクへ確定します。各原稿には `## [Unreleased]` と
+`[Unreleased]: ...` が1つずつ必要です。指定した原稿が欠ける、対象版が既に存在する、
+見出し・比較リンクが不正である場合は、原稿を書き換える前に失敗します。
+改行コードを保持し、移動するメジャータグを比較元にしません。
+
+```yaml
+with:
+  target_version: ${{ inputs.target_version }}
+  bump_strategy: none
+  changelog_path: CHANGELOG.md
+  additional_changelog_paths: '["CHANGELOG.ja.md"]'
+```
+
+公開する本文の言語は publish の `changelog_path: CHANGELOG.ja.md` で独立して指定します。
+publish は指定した版の CHANGELOG から本文を抽出し、GitHub の自動生成ノート
+（What's Changed）を併記しません。公開済み Release の本文を遡って変更しません。
+
+### 公開後の Docker・検証の証跡
+
+draft 作成、成果物の生成・添付・再取得検証、finalize を caller の `needs` で接続します。
+finalize の `append_release_evidence: true` で、公開後の本文へ共通書式の証跡を追記できます。
+`verification_results` に `${{ toJSON(needs) }}` を渡し、Docker を公開する場合は
+build ジョブの outputs から `docker_image` と `docker_digest` を対で渡します。
+Docker を使わない repo では両方を省略できます。
+
+```yaml
+finalize:
+  needs: [draft, build, verify-assets]
+  uses: scottlz0310/release-automate/.github/workflows/reusable-finalize-release.yml@<固定コミットSHA>
+  permissions:
+    contents: write
+  with:
+    tag_name: ${{ needs.draft.outputs.tag_name }}
+    target_sha: ${{ needs.draft.outputs.target_sha }}
+    append_release_evidence: true
+    docker_image: ghcr.io/owner/repository
+    docker_digest: ${{ needs.build.outputs.digest }}
+    verification_results: ${{ toJSON(needs) }}
+```
+
+- Docker の digest は実際の build の返却値を使います。タグ名から推測しません。
+- 検証節は対象 SHA、公開 run のリンク、caller が報告した依存ジョブの成功を記録します。
+  `needs` の outputs の内容は本文へ出力しません。この機能は caller の報告を整形するもので、
+  イメージの pull・成果物の再取得や実機検証を代行しません。それらは依存ジョブで実施します。
+- 空の結果・成功以外の依存ジョブ・不正な image/digest は公開前に拒否します。
+- `<!-- release-automate:evidence:start -->` から end までを管理し、再実行時はその部分だけを
+  置換します。外側の本文を保持し、マーカーが壊れていれば失敗します。
+- 公開後の本文更新に失敗した場合は run を失敗させます。公開自体は済んでいるため、
+  同じ対象の再実行・既存公開済み Release の finalize で追記を完了します。
+- 既定は無効で、既存 caller の権限や入力を追加で要求しません。
+
+`bash tests/release-adoption.sh` は翻訳の欠落・不正、改行保持、固定タグの比較リンク、
+証跡の生成・再実行・本文保持・更新失敗・読み戻し不一致をネットワークなしで検証します。
+
+### 基本の publish caller
+
 ```yaml
 name: Publish Release
 

@@ -22,6 +22,11 @@ on:
         required: false
         type: string
         default: 'CHANGELOG.md'
+      additional_changelog_paths:
+        description: '同じ版へ確定する翻訳原稿のパス（JSON 配列）。Release 本文の原稿指定とは独立'
+        required: false
+        type: string
+        default: '[]'
       base_branch:
         description: 'Base branch to create PR against'
         required: false
@@ -338,25 +343,57 @@ jobs:
           VERSION: ${{ steps.validate_version.outputs.version }}
           TAG_NAME: ${{ steps.validate_version.outputs.tag_name }}
           CHANGELOG_PATH: ${{ inputs.changelog_path }}
+          ADDITIONAL_CHANGELOG_PATHS: ${{ inputs.additional_changelog_paths }}
+          REPOSITORY: ${{ github.repository }}
         run: |
-          TODAY=$(date +'%Y-%m-%d')
-          if [ -f "$CHANGELOG_PATH" ]; then
-            echo "Updating $CHANGELOG_PATH..."
-            PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-            REPO_URL="https://github.com/${{ github.repository }}"
+          python3 - <<'PY'
+          import datetime
+          import json
+          import os
+          import pathlib
+          import re
+          import subprocess
 
-            # Replace [Unreleased] header with new version and fresh [Unreleased]
-            sed -i "s/## \[Unreleased\]/## [Unreleased]\n\n## [${VERSION}] - ${TODAY}/" "$CHANGELOG_PATH"
-
-            # Update comparison links
-            if [ -n "$PREV_TAG" ]; then
-              sed -i "s|\[Unreleased\]: .*|\[Unreleased\]: ${REPO_URL}/compare/${TAG_NAME}...HEAD\n[${VERSION}]: ${REPO_URL}/compare/${PREV_TAG}...${TAG_NAME}|" "$CHANGELOG_PATH"
-            else
-              sed -i "s|\[Unreleased\]: .*|\[Unreleased\]: ${REPO_URL}/compare/${TAG_NAME}...HEAD\n[${VERSION}]: ${REPO_URL}/releases/tag/${TAG_NAME}|" "$CHANGELOG_PATH"
-            fi
-          else
-            echo "No changelog found at $CHANGELOG_PATH. Skipping changelog update."
-          fi
+          primary = pathlib.Path(os.environ["CHANGELOG_PATH"])
+          additional = json.loads(os.environ["ADDITIONAL_CHANGELOG_PATHS"])
+          if not isinstance(additional, list) or any(not isinstance(p, str) or not p for p in additional):
+              raise ValueError("additional_changelog_paths は空でないパスの JSON 配列が必要です")
+          paths = list(dict.fromkeys([primary, *(pathlib.Path(p) for p in additional)]))
+          if not primary.is_file() and not additional:
+              print(f"No changelog found at {primary}. Skipping changelog update.")
+              raise SystemExit(0)
+          previous = subprocess.run(
+              ["git", "tag", "--merged", "HEAD", "--sort=-version:refname"],
+              check=True, capture_output=True, text=True,
+          )
+          previous_tag = next((t for t in previous.stdout.splitlines()
+                               if re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.]+)?", t)), "")
+          version, tag = os.environ["VERSION"], os.environ["TAG_NAME"]
+          repo_url = f'https://github.com/{os.environ["REPOSITORY"]}'
+          today = datetime.date.today().isoformat()
+          prepared = []
+          for path in paths:
+              raw = path.read_bytes()
+              text = raw.decode("utf-8")
+              newline = "\r\n" if b"\r\n" in raw else "\n"
+              text = text.replace("\r\n", "\n")
+              if len(re.findall(r"^## \[Unreleased\]\s*$", text, re.MULTILINE)) != 1:
+                  raise ValueError(f"{path}: Unreleased 見出しは1つ必要です")
+              if re.search(r"^## \[" + re.escape(version) + r"\]", text, re.MULTILINE):
+                  raise ValueError(f"{path}: 対象版 {version} は既に存在します")
+              text = re.sub(r"^## \[Unreleased\][ \t]*$",
+                            f"## [Unreleased]\n\n## [{version}] - {today}", text, flags=re.MULTILINE)
+              comparison = (f"{repo_url}/compare/{previous_tag}...{tag}" if previous_tag
+                            else f"{repo_url}/releases/tag/{tag}")
+              links = f"[Unreleased]: {repo_url}/compare/{tag}...HEAD\n[{version}]: {comparison}"
+              text, count = re.subn(r"^\[Unreleased\]:[^\n]*$", lambda _: links, text, flags=re.MULTILINE)
+              if count != 1:
+                  raise ValueError(f"{path}: Unreleased 比較リンクは1つ必要です")
+              prepared.append((path, text.replace("\n", newline).encode("utf-8")))
+          # 翻訳の欠落や不正を検出してから、一式を更新する。
+          for path, content in prepared:
+              path.write_bytes(content)
+          PY
 
       - name: Create Release Pull Request
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1

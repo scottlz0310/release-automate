@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- prepare に `additional_changelog_paths` を追加し、翻訳 CHANGELOG を同じ版・日付・固定タグの比較リンクへ同時に確定する。全原稿を検証してから更新し、主原稿だけの既定動作は維持する（#45）。
+- finalize に任意の `append_release_evidence`、Docker image/digest、`verification_results` を追加。呼出元の成功した依存ジョブと実 build の digest を共通書式で公開後に追記し、再実行では専用部分だけを置換して重複を防ぐ。不正入力は公開前に拒否し、本文更新失敗や読み戻し不一致を成功扱いしない（#45）。
+
 ## [3.1.0] - 2026-10-21
 
 ### Added
