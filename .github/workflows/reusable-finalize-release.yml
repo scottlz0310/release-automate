@@ -21,6 +21,26 @@ on:
         required: false
         type: string
         default: 'chore(release):'
+      append_release_evidence:
+        description: '公開後に Docker・検証の証跡を追記する'
+        required: false
+        type: boolean
+        default: false
+      docker_image:
+        description: 'build ジョブが公開したコンテナイメージ名（digest と対で指定）'
+        required: false
+        type: string
+        default: ''
+      docker_digest:
+        description: 'build ジョブが返した sha256 digest'
+        required: false
+        type: string
+        default: ''
+      verification_results:
+        description: '呼出元の toJSON(needs)。成功した依存ジョブの結果を記録する'
+        required: false
+        type: string
+        default: '{}'
     outputs:
       release_state:
         description: 'published after successful finalization'
@@ -37,6 +57,45 @@ jobs:
     outputs:
       release_state: ${{ steps.publish.outputs.release_state }}
     steps:
+      - name: Prepare release evidence
+        if: inputs.append_release_evidence
+        env:
+          DOCKER_IMAGE: ${{ inputs.docker_image }}
+          DOCKER_DIGEST: ${{ inputs.docker_digest }}
+          VERIFICATION_RESULTS: ${{ inputs.verification_results }}
+          TARGET_SHA: ${{ inputs.target_sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import pathlib
+          import re
+
+          image, digest = os.environ["DOCKER_IMAGE"], os.environ["DOCKER_DIGEST"]
+          if bool(image) != bool(digest):
+              raise ValueError("docker_image と docker_digest は対で指定してください")
+          if image and (not re.fullmatch(r"[a-z0-9][a-z0-9./:_-]*", image)
+                        or not re.fullmatch(r"sha256:[0-9a-f]{64}", digest)):
+              raise ValueError("Docker イメージ名または sha256 digest が不正です")
+          results = json.loads(os.environ["VERIFICATION_RESULTS"])
+          if not isinstance(results, dict) or not results:
+              raise ValueError("verification_results に呼出元の toJSON(needs) を指定してください")
+          for name, job in results.items():
+              if (not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_-]*", name)
+                      or not isinstance(job, dict) or job.get("result") != "success"):
+                  raise ValueError(f"検証依存ジョブが成功していません: {name}")
+          lines = ["<!-- release-automate:evidence:start -->"]
+          if image:
+              lines += ["## Docker", "", f"- イメージ: `{image}@{digest}`", ""]
+          lines += ["## 検証", "", f'- 対象コミット: `{os.environ["TARGET_SHA"]}`',
+                    f'- [公開 workflow]({os.environ["RUN_URL"]})',
+                    "- 呼出元が報告した依存ジョブの結果:"]
+          lines += [f"  - `{name}`: success" for name in sorted(results)]
+          lines += ["", "<!-- release-automate:evidence:end -->", ""]
+          pathlib.Path("RELEASE_EVIDENCE.md").write_text("\n".join(lines), encoding="utf-8")
+          PY
+
       - name: Verify draft and publish Release
         id: publish
         env:
@@ -156,3 +215,41 @@ jobs:
             exit 1
           fi
           echo 'release_state=published' >> "$GITHUB_OUTPUT"
+
+      - name: Append release evidence
+        if: inputs.append_release_evidence
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag_name }}
+        run: |
+          set -euo pipefail
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body > RELEASE_BODY.json
+          python3 - <<'PY'
+          import json
+          import pathlib
+
+          body = json.loads(pathlib.Path("RELEASE_BODY.json").read_text(encoding="utf-8"))["body"] or ""
+          evidence = pathlib.Path("RELEASE_EVIDENCE.md").read_text(encoding="utf-8")
+          start, end = "<!-- release-automate:evidence:start -->", "<!-- release-automate:evidence:end -->"
+          if body.count(start) != body.count(end) or body.count(start) > 1:
+              raise ValueError("Release 本文の証跡マーカーが不整合です")
+          if start in body:
+              first, last = body.index(start), body.index(end)
+              if last < first:
+                  raise ValueError("Release 本文の証跡マーカーの順序が不正です")
+              updated = body[:first] + evidence.rstrip("\n") + body[last + len(end):]
+          else:
+              updated = body.rstrip("\n") + "\n\n" + evidence
+          pathlib.Path("RELEASE_NOTES.md").write_text(updated, encoding="utf-8")
+          PY
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file RELEASE_NOTES.md
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body > CONFIRMED_RELEASE_BODY.json
+          python3 - <<'PY'
+          import json
+          import pathlib
+
+          expected = pathlib.Path("RELEASE_NOTES.md").read_text(encoding="utf-8")
+          actual = json.loads(pathlib.Path("CONFIRMED_RELEASE_BODY.json").read_text(encoding="utf-8"))["body"]
+          if actual != expected:
+              raise ValueError("公開後の Release 本文が追記結果と一致しません")
+          PY
