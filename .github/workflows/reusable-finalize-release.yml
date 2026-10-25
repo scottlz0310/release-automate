@@ -112,7 +112,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ||
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?(\+[a-zA-Z0-9.-]+)?$ ||
                 ! "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]]; then
             echo '::error::Release tag or target SHA does not match this workflow run'
             exit 1

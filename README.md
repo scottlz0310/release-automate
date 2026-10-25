@@ -193,6 +193,11 @@ with:
 publish は指定した版の CHANGELOG から本文を抽出し、GitHub の自動生成ノート
 （What's Changed）を併記しません。公開済み Release の本文を遡って変更しません。
 
+共通 workflow は RC 等の prerelease と build metadata を保持します。`+` より前に
+prerelease 識別子がある場合だけ GitHub Release を prerelease とし、build metadata 内の
+ハイフンは prerelease の判定に使いません。各 caller は必要に応じて安定版に制限できます。
+本 repo の自己リリース caller は引き続き安定版だけを受け付けます。
+
 ### 公開後の Docker・検証の証跡
 
 draft 作成、成果物の生成・添付・再取得検証、finalize を caller の `needs` で接続します。

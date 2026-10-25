@@ -20,13 +20,15 @@ extract_step "$repo_root/.github/workflows/reusable-publish-release.yml" \
   'Create Git Tag and GitHub Release' "$test_dir/publish.sh"
 extract_step "$repo_root/.github/workflows/reusable-finalize-release.yml" \
   'Verify draft and publish Release' "$test_dir/finalize.sh"
+extract_step "$repo_root/.github/workflows/reusable-publish-release.yml" \
+  'Extract Tag and Release Notes' "$test_dir/notes.sh"
 
 mkdir "$test_dir/bin" "$test_dir/state"
 cat > "$test_dir/bin/gh" <<'MOCK'
 #!/usr/bin/env bash
 set -euo pipefail
 state=$MOCK_STATE
-tag=v1.2.3
+tag=$TAG
 case "$1" in
   api)
     shift
@@ -102,6 +104,7 @@ case "$1" in
   release)
     case "$2" in
       create)
+        printf '%s\n' "$@" > "$state/create_args"
         [[ -f "$state/tag_sha" && ! -f "$state/release_state" ]]
         if [[ -f "$state/fail_create" ]]; then
           rm "$state/fail_create"
@@ -448,6 +451,30 @@ for failure in duplicate_after_edit draft_after_edit; do
     echo "公開後の $failure を見落としました" >&2
     exit 1
   fi
+done
+
+# 既存 repo の RC 公開を維持し、build metadata のハイフンは RC と誤認しない。
+for variant in v1.2.3-rc.1 v1.2.3+build.1 v1.2.3+build-feature v1.2.3-rc.1+build.1; do
+  reset_state
+  TAG=$variant run_publish
+  if [[ "${variant%%+*}" == *-* ]]; then
+    grep -qx -- --prerelease "$MOCK_STATE/create_args"
+  elif grep -qx -- --prerelease "$MOCK_STATE/create_args"; then
+    echo 'build metadata を prerelease と誤認しました' >&2
+    exit 1
+  fi
+  TAG=$variant run_finalize
+  assert_count publish-release 1
+  mkdir -p "$test_dir/notes"
+  (
+    cd "$test_dir/notes"
+    printf '## [%s] - 2026-10-26\n\n対象の変更\n\n## [1.0.0]\n隣接版の変更\n' "${variant#v}" > CHANGELOG.md
+    COMMIT_MSG="chore(release): $variant" PREFIX='chore(release):' CHANGELOG_PATH=CHANGELOG.md \
+      bash "$test_dir/notes.sh" > /dev/null
+    grep -q '対象の変更' RELEASE_NOTES.md
+    if grep -q '隣接版の変更' RELEASE_NOTES.md; then exit 1; fi
+    grep -qxF "tag_name=$variant" "$GITHUB_OUTPUT"
+  )
 done
 
 echo 'Release workflow scenarios passed'
