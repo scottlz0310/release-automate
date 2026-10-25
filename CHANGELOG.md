@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-10-26
+
 ### Added
 - prepare に `additional_changelog_paths` を追加し、翻訳 CHANGELOG を同じ版・日付・固定タグの比較リンクへ同時に確定する。全原稿を検証してから更新し、主原稿だけの既定動作は維持する（#45）。
 - finalize に任意の `append_release_evidence`、Docker image/digest、`verification_results` を追加。呼出元の成功した依存ジョブと実 build の digest を共通書式で公開後に追記し、再実行では専用部分だけを置換して重複を防ぐ。不正入力は公開前に拒否し、本文更新失敗や読み戻し不一致を成功扱いしない（#45）。
@@ -87,7 +89,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enforced `commit_message_prefix` check at the job level and pinned release checkout/target to trigger commit SHA in `reusable-publish-release.yml`.
 - Aligned Organization secret names in design document with workflow implementation (`RELEASE_BOT_APP_ID`, `RELEASE_BOT_PRIVATE_KEY`).
 
-[Unreleased]: https://github.com/scottlz0310/release-automate/compare/v3.1.0...HEAD
+[Unreleased]: https://github.com/scottlz0310/release-automate/compare/v3.2.0...HEAD
+[3.2.0]: https://github.com/scottlz0310/release-automate/compare/v3.1.0...v3.2.0
 [3.1.0]: https://github.com/scottlz0310/release-automate/compare/v3.0.0...v3.1.0
 [3.0.0]: https://github.com/scottlz0310/release-automate/compare/v2.1.0...v3.0.0
 [2.1.0]: https://github.com/scottlz0310/release-automate/compare/v2.0.0...v2.1.0
