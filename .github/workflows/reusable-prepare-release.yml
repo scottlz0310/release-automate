@@ -380,9 +380,11 @@ jobs:
                                   for p in prerelease.split(".")) if prerelease is not None else ()
               return major, minor, patch, prerelease is None, identifiers
 
-          tags = [t for t in previous.stdout.splitlines() if semver_key(t) is not None]
-          previous_tag = max(tags, key=semver_key) if tags else ""
           version, tag = os.environ["VERSION"], os.environ["TAG_NAME"]
+          target_key = semver_key(tag)
+          tags = [t for t in previous.stdout.splitlines()
+                  if (key := semver_key(t)) is not None and key < target_key]
+          previous_tag = max(tags, key=semver_key) if tags else ""
           repo_url = f'https://github.com/{os.environ["REPOSITORY"]}'
           today = datetime.date.today().isoformat()
           prepared = []

@@ -86,6 +86,57 @@ fixture
 bash "$test_dir/changelog.sh"
 grep -Fq '[1.2.3]: https://github.com/owner/repo/releases/tag/v1.2.3' CHANGELOG.md
 
+# 実際のタグと分岐履歴で、対象版未満かつ到達可能な比較元だけを選ぶ。
+python3 - "$test_dir/changelog.sh" "$test_dir" <<'PY'
+import os
+import pathlib
+import subprocess
+import sys
+
+script, root = map(pathlib.Path, sys.argv[1:])
+cases = [
+    ("旧系列混在", "0.7.0", ["v3.2.0", "v3.1.0", "v0.6.0", "v0.5.0"], [], "v0.6.0"),
+    ("対象版以上のみ", "0.7.0", ["v3.2.0", "v0.7.0", "v0.7.0+build.1"], [], None),
+    ("対象版と同順位", "1.2.3+build.2", ["v1.2.3", "v1.2.3+build.1", "v1.2.2"], [], "v1.2.2"),
+    ("RCの数値順", "1.2.3-rc.11", ["v1.2.3-rc.2", "v1.2.3-rc.10", "v1.2.3", "v1.2.4-rc.1"], [], "v1.2.3-rc.10"),
+    ("RCの文字列順", "1.2.3-rc.1", ["v1.2.3-alpha.1", "v1.2.3-beta.2", "v1.2.3-rc.2"], [], "v1.2.3-beta.2"),
+    ("安定版の前のRC", "1.2.3", ["v1.2.2", "v1.2.3-rc.10"], [], "v1.2.3-rc.10"),
+    ("比較元のmetadata", "1.2.3", ["v1.2.2+build.1", "v1.2.4+build.1"], [], "v1.2.2+build.1"),
+    ("初回リリース", "1.0.0", [], [], None),
+    ("固定タグ以外", "1.0.0", ["v1", "v1.0", "nightly", "other-v0.9.0"], [], None),
+    ("未マージのタグ", "1.2.3", ["v1.2.1"], ["v1.2.2"], "v1.2.1"),
+]
+for index, (name, version, tags, unmerged, expected) in enumerate(cases):
+    work = root / f"previous-tag-{index}"
+    work.mkdir()
+
+    def git(*args):
+        return subprocess.run(["git", *args], cwd=work, check=True, capture_output=True, text=True).stdout.strip()
+
+    git("init", "-q")
+    git("-c", "user.name=test", "-c", "user.email=test@example.invalid", "commit", "-qm", "initial", "--allow-empty")
+    base = git("rev-parse", "HEAD")
+    for tag in tags:
+        git("tag", tag)
+    if unmerged:
+        git("checkout", "-qb", "unmerged")
+        git("-c", "user.name=test", "-c", "user.email=test@example.invalid", "commit", "-qm", "unmerged", "--allow-empty")
+        for tag in unmerged:
+            git("tag", tag)
+        git("checkout", "--detach", base)
+    fixture = "# Changelog\n\n## [Unreleased]\n\n- 更新内容\n\n[Unreleased]: https://github.com/owner/repo/compare/main...HEAD\n"
+    for path in ("CHANGELOG.md", "CHANGELOG.ja.md"):
+        (work / path).write_text(fixture, encoding="utf-8")
+    env = dict(os.environ, VERSION=version, TAG_NAME=f"v{version}",
+               ADDITIONAL_CHANGELOG_PATHS='["CHANGELOG.ja.md"]')
+    subprocess.run(["bash", str(script)], cwd=work, env=env, check=True)
+    destination = f"compare/{expected}...v{version}" if expected else f"releases/tag/v{version}"
+    link = f"[{version}]: https://github.com/owner/repo/{destination}"
+    for path in ("CHANGELOG.md", "CHANGELOG.ja.md"):
+        assert link in (work / path).read_text(encoding="utf-8").splitlines(), (name, path, link)
+    print(f"比較元タグ: {name} 成功")
+PY
+
 cat > "$test_dir/bin/gh" <<'MOCK'
 #!/usr/bin/env bash
 set -euo pipefail
