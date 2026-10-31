@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- prepare の CHANGELOG 比較元を、対象版より小さい到達可能な固定タグに限定。旧系列の高い版や同じ優先順位の build metadata 付きタグを選ばないようにした。
+
 ## [3.2.0] - 2026-10-26
 
 ### Added
