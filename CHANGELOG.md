@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.1] - 2026-10-31
+
 ### Fixed
 - prepare の CHANGELOG 比較元を、対象版より小さい到達可能な固定タグに限定。旧系列の高い版や同じ優先順位の build metadata 付きタグを選ばないようにした。
 
@@ -92,7 +94,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enforced `commit_message_prefix` check at the job level and pinned release checkout/target to trigger commit SHA in `reusable-publish-release.yml`.
 - Aligned Organization secret names in design document with workflow implementation (`RELEASE_BOT_APP_ID`, `RELEASE_BOT_PRIVATE_KEY`).
 
-[Unreleased]: https://github.com/scottlz0310/release-automate/compare/v3.2.0...HEAD
+[Unreleased]: https://github.com/scottlz0310/release-automate/compare/v3.2.1...HEAD
+[3.2.1]: https://github.com/scottlz0310/release-automate/compare/v3.2.0...v3.2.1
 [3.2.0]: https://github.com/scottlz0310/release-automate/compare/v3.1.0...v3.2.0
 [3.1.0]: https://github.com/scottlz0310/release-automate/compare/v3.0.0...v3.1.0
 [3.0.0]: https://github.com/scottlz0310/release-automate/compare/v2.1.0...v3.0.0
