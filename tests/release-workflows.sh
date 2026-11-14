@@ -9,8 +9,9 @@ extract_step() {
   awk -v step="$2" '
     { sub(/\r$/, "") }
     $0 == "      - name: " step { found = 1; next }
+    found && /^      - / { found = 0 }
     found && /^        run: \|$/ { running = 1; next }
-    running && /^      - / { exit }
+    running && /^ {0,9}[^ ]/ { exit }
     running { sub(/^          /, ""); print }
   ' "$1" > "$3"
   [[ -s "$3" ]]
