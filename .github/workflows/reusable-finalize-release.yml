@@ -41,6 +41,28 @@ on:
         required: false
         type: string
         default: '{}'
+      notify_scoop_bucket:
+        description: '公開後に Scoop バケットの更新ワークフローへ repository_dispatch を送信する'
+        required: false
+        type: boolean
+        default: false
+      scoop_bucket_repo:
+        description: '通知先の Scoop バケットリポジトリ（repo 名または owner/repo。既定は同一オーナーの scoop-bucket）'
+        required: false
+        type: string
+        default: 'scoop-bucket'
+      scoop_manifest:
+        description: '更新対象の Scoop マニフェスト名（省略時はリポジトリ名の小文字化）'
+        required: false
+        type: string
+        default: ''
+    secrets:
+      RELEASE_BOT_CLIENT_ID:
+        description: 'GitHub App Client ID for Scoop bucket dispatch'
+        required: false
+      RELEASE_BOT_PRIVATE_KEY:
+        description: 'GitHub App Private Key (PEM format) for Scoop bucket dispatch'
+        required: false
     outputs:
       release_state:
         description: 'published after successful finalization'
@@ -253,3 +275,82 @@ jobs:
           if actual != expected:
               raise ValueError("公開後の Release 本文が追記結果と一致しません")
           PY
+
+  notify-scoop-bucket:
+    needs: finalize
+    if: ${{ !cancelled() && inputs.notify_scoop_bucket && needs.finalize.outputs.release_state == 'published' }}
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Prepare Scoop bucket dispatch
+        id: target
+        env:
+          RAW_BUCKET_REPO: ${{ inputs.scoop_bucket_repo }}
+          RAW_MANIFEST: ${{ inputs.scoop_manifest }}
+        run: |
+          set -euo pipefail
+          default_owner=${GITHUB_REPOSITORY%%/*}
+          repo_name=${GITHUB_REPOSITORY#*/}
+          if [[ "$RAW_BUCKET_REPO" == */* ]]; then
+            bucket_owner=${RAW_BUCKET_REPO%%/*}
+            bucket_repo=${RAW_BUCKET_REPO#*/}
+          else
+            bucket_owner=$default_owner
+            bucket_repo=$RAW_BUCKET_REPO
+          fi
+          if [[ -z "$bucket_owner" || -z "$bucket_repo" ||
+                "$bucket_owner" == '.' || "$bucket_owner" == '..' ||
+                "$bucket_repo" == '.' || "$bucket_repo" == '..' ||
+                ! "$bucket_owner" =~ ^[A-Za-z0-9._-]+$ ||
+                ! "$bucket_repo" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "::error::Invalid scoop_bucket_repo: '$RAW_BUCKET_REPO'"
+            exit 1
+          fi
+          manifest=$RAW_MANIFEST
+          if [[ -z "$manifest" ]]; then
+            manifest=$(printf '%s' "$repo_name" | tr '[:upper:]' '[:lower:]')
+          fi
+          if [[ "$manifest" == *..* || ! "$manifest" =~ ^[a-z0-9]([a-z0-9._-]*[a-z0-9])?$ ]]; then
+            echo "::error::Invalid scoop_manifest: '$manifest'"
+            exit 1
+          fi
+          {
+            echo "bucket_owner=$bucket_owner"
+            echo "bucket_repo=$bucket_repo"
+            echo "manifest=$manifest"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Generate GitHub App token for Scoop bucket
+        id: app_token
+        continue-on-error: true
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ secrets.RELEASE_BOT_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+          owner: ${{ steps.target.outputs.bucket_owner }}
+          repositories: ${{ steps.target.outputs.bucket_repo }}
+          permission-contents: write
+
+      - name: Dispatch Scoop bucket update
+        id: dispatch
+        if: steps.app_token.outcome == 'success'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+          BUCKET_FULL_REPO: ${{ steps.target.outputs.bucket_owner }}/${{ steps.target.outputs.bucket_repo }}
+          MANIFEST: ${{ steps.target.outputs.manifest }}
+          TAG_NAME: ${{ inputs.tag_name }}
+        run: |
+          set -euo pipefail
+          jq -nc \
+            --arg event_type 'release-published' \
+            --arg manifest "$MANIFEST" \
+            --arg tag "$TAG_NAME" \
+            --arg source_repo "$GITHUB_REPOSITORY" \
+            '{event_type: $event_type, client_payload: {manifest: $manifest, tag: $tag, source_repo: $source_repo}}' |
+            gh api "repos/$BUCKET_FULL_REPO/dispatches" --method POST --input -
+
+      - name: Warn if Scoop bucket dispatch failed
+        if: steps.app_token.outcome != 'success' || steps.dispatch.outcome != 'success'
+        run: |
+          echo "::warning title=Scoop バケットへの更新通知を送れませんでした::リリースは公開済みです。バケットの定期実行（毎日 03:17 UTC）または手動実行で更新できます（トークン発行: ${{ steps.app_token.outcome }}、通知送信: ${{ steps.dispatch.outcome }}）。"

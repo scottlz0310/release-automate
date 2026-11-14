@@ -240,6 +240,34 @@ finalize:
 `bash tests/release-adoption.sh` は翻訳の欠落・不正、改行保持、固定タグの比較リンク、
 証跡の生成・再実行・本文保持・更新失敗・読み戻し不一致をネットワークなしで検証します。
 
+### 公開後の Scoop バケット更新通知
+
+Scoop バケットで配布するアプリでは、finalize の `notify_scoop_bucket: true` を指定すると、
+Release 公開成功後に Scoop バケットへ `repository_dispatch`（`event_type: release-published`）を送信できます。
+対象バケットへの `contents: write` トークンを `actions/create-github-app-token` で都度発行するため、
+caller 側で `RELEASE_BOT_CLIENT_ID` と `RELEASE_BOT_PRIVATE_KEY` を渡します（`secrets: inherit` でも可）。
+
+```yaml
+finalize:
+  needs: [draft, verify]
+  if: ${{ !cancelled() && needs.draft.outputs.release_state == 'draft' && needs.verify.result == 'success' }}
+  uses: scottlz0310/release-automate/.github/workflows/reusable-finalize-release.yml@<固定コミットSHA>
+  permissions:
+    contents: write
+  with:
+    tag_name: ${{ needs.draft.outputs.tag_name }}
+    target_sha: ${{ needs.draft.outputs.target_sha }}
+    notify_scoop_bucket: true
+  secrets:
+    RELEASE_BOT_CLIENT_ID: ${{ secrets.RELEASE_BOT_CLIENT_ID }}
+    RELEASE_BOT_PRIVATE_KEY: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+```
+
+- `scoop_bucket_repo`（既定: `'scoop-bucket'`）で通知先リポジトリ名または `owner/repo` を指定できます。
+- `scoop_manifest`（既定: リポジトリ名の小文字化）で更新対象マニフェスト名を上書きできます。
+- 既定は `notify_scoop_bucket: false` であり、Scoop 未使用の caller はシークレットや設定を増やさず利用できます。
+- トークン発行・dispatch 送信に失敗しても公開済みリリースは失敗扱いにせず、`::warning::` を出力します。
+
 ### 基本の publish caller
 
 ```yaml
