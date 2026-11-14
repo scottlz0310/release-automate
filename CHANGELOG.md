@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.3.0] - 2026-11-14
+
 ### Added
 
 - finalize に任意の `notify_scoop_bucket`、`scoop_bucket_repo`、`scoop_manifest` と `RELEASE_BOT_CLIENT_ID` / `RELEASE_BOT_PRIVATE_KEY` を追加。Release 公開成功後に対象 Scoop バケットへ `repository_dispatch` (`release-published`) を送信し、既定では通知無効のまま既存の権限や呼び出しに影響を与えない。通知失敗時も公開済みリリースは失敗にせず警告を残す。
@@ -102,7 +104,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enforced `commit_message_prefix` check at the job level and pinned release checkout/target to trigger commit SHA in `reusable-publish-release.yml`.
 - Aligned Organization secret names in design document with workflow implementation (`RELEASE_BOT_APP_ID`, `RELEASE_BOT_PRIVATE_KEY`).
 
-[Unreleased]: https://github.com/scottlz0310/release-automate/compare/v3.2.1...HEAD
+[Unreleased]: https://github.com/scottlz0310/release-automate/compare/v3.3.0...HEAD
+[3.3.0]: https://github.com/scottlz0310/release-automate/compare/v3.2.1...v3.3.0
 [3.2.1]: https://github.com/scottlz0310/release-automate/compare/v3.2.0...v3.2.1
 [3.2.0]: https://github.com/scottlz0310/release-automate/compare/v3.1.0...v3.2.0
 [3.1.0]: https://github.com/scottlz0310/release-automate/compare/v3.0.0...v3.1.0
