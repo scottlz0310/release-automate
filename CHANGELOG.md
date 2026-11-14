@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- finalize に任意の `notify_scoop_bucket`、`scoop_bucket_repo`、`scoop_manifest` と `RELEASE_BOT_CLIENT_ID` / `RELEASE_BOT_PRIVATE_KEY` を追加。Release 公開成功後に対象 Scoop バケットへ `repository_dispatch` (`release-published`) を送信し、既定では通知無効のまま既存の権限や呼び出しに影響を与えない。通知失敗時も公開済みリリースは失敗にせず警告を残す。
+
 ### Changed
 
 - `renovate.json` の `extends` から、中央プリセットで解除済みの非推奨プリセット（`options/automerge`・`options/schedule`・`options/security`）への参照を削除した。スケジュール・待機期間・自動マージ等は中央側で既に解除されているため更新の挙動は変わらず、Dependency Dashboard の警告表示が消える。

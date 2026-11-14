@@ -9,8 +9,9 @@ extract_step() {
   awk -v step="$2" '
     { sub(/\r$/, "") }
     $0 == "      - name: " step { found=1; next }
+    found && /^      - / { found=0 }
     found && /^        run: \|$/ { running=1; next }
-    running && /^      - / { exit }
+    running && /^ {0,9}[^ ]/ { exit }
     running { sub(/^          /, ""); print }
   ' "$1" > "$3"
   [[ -s "$3" ]]
@@ -18,6 +19,8 @@ extract_step() {
 extract_step "$repo_root/.github/workflows/reusable-prepare-release.yml" 'Update Changelog' "$test_dir/changelog.sh"
 extract_step "$repo_root/.github/workflows/reusable-finalize-release.yml" 'Prepare release evidence' "$test_dir/prepare.sh"
 extract_step "$repo_root/.github/workflows/reusable-finalize-release.yml" 'Append release evidence' "$test_dir/append.sh"
+extract_step "$repo_root/.github/workflows/reusable-finalize-release.yml" 'Prepare Scoop bucket dispatch' "$test_dir/prepare-scoop.sh"
+extract_step "$repo_root/.github/workflows/reusable-finalize-release.yml" 'Dispatch Scoop bucket update' "$test_dir/dispatch-scoop.sh"
 
 mkdir "$test_dir/work" "$test_dir/bin"
 cd "$test_dir/work"
@@ -151,6 +154,11 @@ case "$1 $2" in
     echo edit >> calls
     if [[ -f mismatch ]]; then echo changed >> body.md; fi
     ;;
+  'api '*)
+    [[ ! -f fail-dispatch ]]
+    printf '%s\n' "$2" > dispatch-endpoint
+    cat > dispatch-payload.json
+    ;;
   *) echo "予期しない gh 呼び出し: $*" >&2; exit 1 ;;
 esac
 MOCK
@@ -207,4 +215,56 @@ for failure in fail-view fail-edit mismatch marker; do
     exit 1
   fi
 done
+
+# Scoop バケット通知のターゲット検証・既定値・payload 生成を検証する。
+export GITHUB_OUTPUT="$test_dir/scoop-output"
+: > "$GITHUB_OUTPUT"
+GITHUB_REPOSITORY=ScottLz0310/MyApp RAW_BUCKET_REPO=scoop-bucket RAW_MANIFEST='' \
+  bash "$test_dir/prepare-scoop.sh"
+grep -qxF 'bucket_owner=ScottLz0310' "$GITHUB_OUTPUT"
+grep -qxF 'bucket_repo=scoop-bucket' "$GITHUB_OUTPUT"
+grep -qxF 'manifest=myapp' "$GITHUB_OUTPUT"
+
+: > "$GITHUB_OUTPUT"
+GITHUB_REPOSITORY=owner/repo RAW_BUCKET_REPO=other/custom-bucket RAW_MANIFEST=my-cli.1 \
+  bash "$test_dir/prepare-scoop.sh"
+grep -qxF 'bucket_owner=other' "$GITHUB_OUTPUT"
+grep -qxF 'bucket_repo=custom-bucket' "$GITHUB_OUTPUT"
+grep -qxF 'manifest=my-cli.1' "$GITHUB_OUTPUT"
+
+for bad_bucket in '' 'a/b/c' '../bad' 'owner/..' './repo' 'owner/bad repo' '/repo' 'owner/'; do
+  if GITHUB_REPOSITORY=owner/repo RAW_BUCKET_REPO=$bad_bucket RAW_MANIFEST='' \
+    bash "$test_dir/prepare-scoop.sh" > "$test_dir/error" 2>&1; then
+    echo "不正な scoop_bucket_repo を受け付けました: $bad_bucket" >&2
+    exit 1
+  fi
+done
+
+for bad_manifest in '..' '../etc' '.hidden' 'BadName' 'a..b' 'app-' '-app' 'a/b'; do
+  if GITHUB_REPOSITORY=owner/repo RAW_BUCKET_REPO=scoop-bucket RAW_MANIFEST=$bad_manifest \
+    bash "$test_dir/prepare-scoop.sh" > "$test_dir/error" 2>&1; then
+    echo "不正な scoop_manifest を受け付けました: $bad_manifest" >&2
+    exit 1
+  fi
+done
+
+rm -f fail-dispatch dispatch-endpoint dispatch-payload.json
+GITHUB_REPOSITORY=owner/repo BUCKET_FULL_REPO=other/custom-bucket MANIFEST=my-cli TAG_NAME=v1.2.3 \
+  bash "$test_dir/dispatch-scoop.sh"
+grep -qxF 'repos/other/custom-bucket/dispatches' dispatch-endpoint
+python3 - <<'PY'
+import json
+import pathlib
+
+payload = json.loads(pathlib.Path("dispatch-payload.json").read_text(encoding="utf-8"))
+assert payload == {
+    "event_type": "release-published",
+    "client_payload": {
+        "manifest": "my-cli",
+        "tag": "v1.2.3",
+        "source_repo": "owner/repo",
+    },
+}, payload
+PY
+
 echo 'Release adoption scenarios passed'
