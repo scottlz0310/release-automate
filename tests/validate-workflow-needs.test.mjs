@@ -160,6 +160,78 @@ jobs:
       '重複したジョブ名 "build"',
     ],
     [
+      "大文字・小文字だけが異なるジョブ ID の重複",
+      `name: DuplicateJobIdCaseInsensitive
+on: [push]
+jobs:
+  validate:
+    runs-on: ubuntu-26.04
+    steps: []
+  VALIDATE:
+    runs-on: ubuntu-26.04
+    steps: []
+  prepare:
+    needs: validate
+    runs-on: ubuntu-26.04
+    steps: []
+`,
+      '重複したジョブ ID があります ("validate" と "VALIDATE")',
+    ],
+    [
+      "needs 配列内の大文字・小文字違いの重複",
+      `name: DuplicateNeedsCaseInsensitive
+on: [push]
+jobs:
+  validate:
+    runs-on: ubuntu-26.04
+    steps: []
+  prepare:
+    needs: [validate, VALIDATE]
+    runs-on: ubuntu-26.04
+    steps: []
+`,
+      '重複したジョブ名 "VALIDATE"',
+    ],
+    [
+      "大文字・小文字違いの自己依存",
+      `name: SelfDepCaseInsensitive
+on: [push]
+jobs:
+  Build:
+    needs: build
+    runs-on: ubuntu-26.04
+    steps: []
+`,
+      "自分自身を参照",
+    ],
+    [
+      "大文字・小文字違いの循環依存",
+      `name: CycleCaseInsensitive
+on: [push]
+jobs:
+  Alpha:
+    needs: beta
+    runs-on: ubuntu-26.04
+    steps: []
+  Beta:
+    needs: alpha
+    runs-on: ubuntu-26.04
+    steps: []
+`,
+      "循環依存",
+    ],
+    [
+      "不正な形式のジョブ ID",
+      `name: InvalidJobId
+on: [push]
+jobs:
+  123-job:
+    runs-on: ubuntu-26.04
+    steps: []
+`,
+      "ジョブ ID 形式が不正",
+    ],
+    [
       "needs に空文字列",
       `name: EmptyString
 on: [push]
@@ -275,6 +347,59 @@ jobs:
       const stderr = cliProc.stderr.toString("utf8");
       expect(stderr).toContain("broken-needs.yml");
       expect(stderr).toContain('存在しないジョブ "typo-validate"');
+    } finally {
+      rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
+  test("Biome 整形済みの大文字・小文字違いの重複ジョブ ID を負例として確実に拒否する", () => {
+    const workDir = mkdtempSync(join(tmpdir(), "workflow-dup-job-id-"));
+    try {
+      const dupFile = join(workDir, "dup-job-id.yml");
+      writeFileSync(
+        dupFile,
+        `name: Duplicate Job ID
+
+on:
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-26.04
+    steps:
+      - run: echo ok
+  VALIDATE:
+    runs-on: ubuntu-26.04
+    steps:
+      - run: echo dup
+  prepare:
+    needs: validate
+    runs-on: ubuntu-26.04
+    steps:
+      - run: echo prepare
+`,
+        "utf8",
+      );
+
+      const biomeProc = Bun.spawnSync(
+        [process.execPath, "x", "biome", "check", "--vcs-enabled=false", dupFile],
+        {
+          cwd: repoRoot,
+          stdout: "pipe",
+          stderr: "pipe",
+        },
+      );
+      expect(biomeProc.exitCode).toBe(0);
+
+      const cliProc = Bun.spawnSync([process.execPath, cliPath, workDir], {
+        cwd: repoRoot,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      expect(cliProc.exitCode).toBe(1);
+      const stderr = cliProc.stderr.toString("utf8");
+      expect(stderr).toContain("dup-job-id.yml");
+      expect(stderr).toContain("重複したジョブ ID");
     } finally {
       rmSync(workDir, { recursive: true, force: true });
     }

@@ -2,9 +2,14 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { extname, join } from "node:path";
 
 const WORKFLOW_EXTENSIONS = new Set([".yml", ".yaml"]);
+const JOB_ID_PATTERN = /^[A-Za-z_][A-Za-z0-9_-]*$/;
 
 function isPlainObject(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function normalizeJobId(jobId) {
+  return jobId.toLowerCase();
 }
 
 function normalizeNeeds(jobId, rawNeeds, filePath, errors) {
@@ -27,17 +32,18 @@ function normalizeNeeds(jobId, rawNeeds, filePath, errors) {
     }
 
     const deps = [];
-    const seen = new Set();
+    const seen = new Map();
     for (const item of rawNeeds) {
       if (typeof item !== "string" || item.trim().length === 0) {
         errors.push(`${filePath}: jobs.${jobId}.needs の要素は非空の文字列である必要があります`);
         continue;
       }
-      if (seen.has(item)) {
+      const key = normalizeJobId(item);
+      if (seen.has(key)) {
         errors.push(`${filePath}: jobs.${jobId}.needs に重複したジョブ名 "${item}" があります`);
         continue;
       }
-      seen.add(item);
+      seen.set(key, item);
       deps.push(item);
     }
     return deps;
@@ -47,40 +53,42 @@ function normalizeNeeds(jobId, rawNeeds, filePath, errors) {
   return [];
 }
 
-function detectCycles(graph, filePath, errors) {
+function detectCycles(graph, displayNames, filePath, errors) {
   // 0: 未訪問, 1: 探索中, 2: 完了
   const state = new Map();
   const stack = [];
   const reportedCycles = new Set();
 
-  function dfs(node) {
-    state.set(node, 1);
-    stack.push(node);
+  function dfs(nodeKey) {
+    state.set(nodeKey, 1);
+    stack.push(nodeKey);
 
-    for (const dep of graph.get(node) ?? []) {
-      if (!graph.has(dep) || dep === node) {
+    for (const depKey of graph.get(nodeKey) ?? []) {
+      if (!graph.has(depKey) || depKey === nodeKey) {
         continue;
       }
-      const depState = state.get(dep) ?? 0;
+      const depState = state.get(depKey) ?? 0;
       if (depState === 1) {
-        const startIdx = stack.indexOf(dep);
-        const cyclePath = [...stack.slice(startIdx), dep].join(" -> ");
+        const startIdx = stack.indexOf(depKey);
+        const cyclePath = [...stack.slice(startIdx), depKey]
+          .map((key) => displayNames.get(key) ?? key)
+          .join(" -> ");
         if (!reportedCycles.has(cyclePath)) {
           reportedCycles.add(cyclePath);
           errors.push(`${filePath}: jobs の needs に循環依存があります (${cyclePath})`);
         }
       } else if (depState === 0) {
-        dfs(dep);
+        dfs(depKey);
       }
     }
 
     stack.pop();
-    state.set(node, 2);
+    state.set(nodeKey, 2);
   }
 
-  for (const jobId of graph.keys()) {
-    if ((state.get(jobId) ?? 0) === 0) {
-      dfs(jobId);
+  for (const jobKey of graph.keys()) {
+    if ((state.get(jobKey) ?? 0) === 0) {
+      dfs(jobKey);
     }
   }
 }
@@ -104,31 +112,56 @@ export function validateWorkflowContent(content, filePath = "<memory>") {
   }
 
   const errors = [];
-  const jobIds = new Set(Object.keys(jobs));
-  const graph = new Map();
+  const jobEntries = Object.entries(jobs);
+  const canonicalJobs = new Map();
 
-  for (const [jobId, jobDef] of Object.entries(jobs)) {
+  for (const [jobId] of jobEntries) {
+    if (!JOB_ID_PATTERN.test(jobId)) {
+      errors.push(`${filePath}: jobs.${jobId} のジョブ ID 形式が不正です`);
+    }
+    const key = normalizeJobId(jobId);
+    const existing = canonicalJobs.get(key);
+    if (existing !== undefined) {
+      errors.push(
+        `${filePath}: jobs に大文字・小文字を区別しない重複したジョブ ID があります ("${existing}" と "${jobId}")`,
+      );
+    } else {
+      canonicalJobs.set(key, jobId);
+    }
+  }
+
+  const graph = new Map();
+  for (const [jobId, jobDef] of jobEntries) {
+    const jobKey = normalizeJobId(jobId);
     if (!isPlainObject(jobDef)) {
       errors.push(`${filePath}: jobs.${jobId} はオブジェクトである必要があります`);
-      graph.set(jobId, []);
+      if (!graph.has(jobKey)) {
+        graph.set(jobKey, []);
+      }
       continue;
     }
 
     const deps = normalizeNeeds(jobId, jobDef.needs, filePath, errors);
-    graph.set(jobId, deps);
-
+    const depKeys = [];
     for (const dep of deps) {
-      if (dep === jobId) {
+      const depKey = normalizeJobId(dep);
+      if (depKey === jobKey) {
         errors.push(`${filePath}: jobs.${jobId}.needs が自分自身を参照しています`);
-      } else if (!jobIds.has(dep)) {
+      } else if (!canonicalJobs.has(depKey)) {
         errors.push(
           `${filePath}: jobs.${jobId}.needs が存在しないジョブ "${dep}" を参照しています`,
         );
+      } else {
+        depKeys.push(depKey);
       }
+    }
+
+    if (!graph.has(jobKey)) {
+      graph.set(jobKey, depKeys);
     }
   }
 
-  detectCycles(graph, filePath, errors);
+  detectCycles(graph, canonicalJobs, filePath, errors);
   return errors;
 }
 
