@@ -12,6 +12,9 @@ pre-commit:
       run: bun scripts/validate-workflow-needs.mjs {staged_files}
 
 pre-push:
+  parallel: true
   commands:
+    bun-test:
+      run: bun test
     pester:
       run: pwsh -NoProfile -Command "Invoke-Pester -Path ./tests"

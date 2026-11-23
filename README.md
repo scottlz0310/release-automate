@@ -71,14 +71,14 @@ v3 の prepare workflow は `RELEASE_BOT_CLIENT_ID` を必須とし、旧 `RELEA
 
    `prepare` スクリプトにより `lefthook install` が自動実行されます。
    - `pre-commit`: 変更された YAML / JSON / Markdown / JS ファイルに対して `bunx biome check` で構文・フォーマットを検証し、`.github/workflows/*.{yml,yaml}` に対してジョブ依存（`needs`）の整合性を検証
-   - `pre-push`: プッシュ前に Pester テストを自動実行
+   - `pre-push`: プッシュ前に `bun test` と Pester テストを自動実行
 
 2. **手動チェック**:
 
    ```powershell
    bun run check
    bun run validate:workflows
-   bun run test:workflows
+   bun run test
    ```
 
 ### 鍵管理スクリプトのテスト

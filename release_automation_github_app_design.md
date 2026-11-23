@@ -312,4 +312,4 @@ jobs:
 - **`pre-commit`**:
   ステージされた YAML / JSON / Markdown / JS ファイルに対して `bunx biome check --no-errors-on-unmatched --files-ignore-unknown=true {staged_files}` を実行し、`.github/workflows/*.{yml,yaml}` に対しては `bun scripts/validate-workflow-needs.mjs {staged_files}` でジョブ依存（`needs`）の整合性をコミット前に検証します。
 - **`pre-push`**:
-  プッシュ前に `pwsh -NoProfile -Command "Invoke-Pester -Path ./tests"` を自動実行し、鍵管理スクリプト（`scripts/*.ps1`）のユニットテストが通ることを強制します。
+  プッシュ前に `bun test`（ワークフロー依存検証スクリプトのテスト）と `pwsh -NoProfile -Command "Invoke-Pester -Path ./tests"`（鍵管理スクリプトのユニットテスト）を並列自動実行します。

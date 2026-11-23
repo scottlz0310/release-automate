@@ -7,8 +7,9 @@
     "check:fix": "biome check --write .",
     "format": "biome format --write .",
     "lint": "biome lint .",
+    "test": "bun test",
+    "test:coverage": "bun test --coverage --coverage-reporter=lcov",
     "validate:workflows": "bun scripts/validate-workflow-needs.mjs",
-    "test:workflows": "bun test tests/validate-workflow-needs.test.mjs",
     "prepare": "lefthook install"
   },
   "devDependencies": {

@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Bun（`.bun-version`）・Biome（`biome.json`）・Lefthook の依存設定（`package.json` / `bun.lock`）と Renovate 共有プリセットを追加し、CI および `pre-commit` フックでの YAML / JSON / Markdown 等のフォーマット・リントを Biome に一本化。あわせてワークフローのジョブ依存（`needs`）を検証するスクリプトとテストを追加（#62）。
+- Bun（`.bun-version`）・Biome（`biome.json`）・Lefthook の依存設定（`package.json` / `bun.lock`）と Renovate 共有プリセットを追加し、CI および `pre-commit` フックでの YAML / JSON / Markdown 等のフォーマット・リントを Biome に一本化。あわせてワークフローのジョブ依存（`needs`）を検証するスクリプト・`bun test`（`pre-push` フックおよび CI での lcov カバレッジ計測・Codecov 送信を含む）を追加（#62）。
 
 ### Removed
 

@@ -6,6 +6,7 @@ import {
   validateWorkflowContent,
   validateWorkflowTargets,
 } from "../scripts/lib/workflow-needs.mjs";
+import { runCli } from "../scripts/validate-workflow-needs.mjs";
 
 const repoRoot = resolve(import.meta.dir, "..");
 const cliPath = join(repoRoot, "scripts", "validate-workflow-needs.mjs");
@@ -290,6 +291,22 @@ on: [push]
       "jobs は 1 件以上のジョブを含むオブジェクト",
     ],
     [
+      "ルートがオブジェクトではない",
+      `- item1
+- item2
+`,
+      "ルートはオブジェクト",
+    ],
+    [
+      "ジョブ定義がオブジェクトではない",
+      `name: InvalidJobDef
+on: [push]
+jobs:
+  build: "not-an-object"
+`,
+      "jobs.build はオブジェクト",
+    ],
+    [
       "YAML 構文エラー",
       `name: Broken
 jobs:
@@ -418,5 +435,35 @@ jobs:
     } finally {
       rmSync(emptyDir, { recursive: true, force: true });
     }
+  });
+
+  test("runCli は単一ファイル指定で正常終了し、存在しないパスは終了コード 1 を返す", () => {
+    const logs = [];
+    const errors = [];
+    const io = {
+      log: (msg) => logs.push(msg),
+      error: (msg) => errors.push(msg),
+    };
+
+    const okCode = runCli([join(repoRoot, ".github", "workflows", "ci.yml")], io);
+    expect(okCode).toBe(0);
+    expect(logs.some((msg) => msg.includes("(1 files)"))).toBe(true);
+    expect(errors).toEqual([]);
+
+    const missingCode = runCli([join(repoRoot, ".github", "workflows", "does-not-exist.yml")], io);
+    expect(missingCode).toBe(1);
+    expect(errors.some((msg) => msg.includes("パスを読み取れません"))).toBe(true);
+  });
+
+  test("runCli は引数省略時に既定の .github/workflows を検証する", () => {
+    const logs = [];
+    const errors = [];
+    const code = runCli([], {
+      log: (msg) => logs.push(msg),
+      error: (msg) => errors.push(msg),
+    });
+    expect(code).toBe(0);
+    expect(errors).toEqual([]);
+    expect(logs.length).toBe(1);
   });
 });

@@ -1,15 +1,21 @@
 #!/usr/bin/env bun
 import { validateWorkflowTargets } from "./lib/workflow-needs.mjs";
 
-const targets = process.argv.slice(2);
-const resolvedTargets = targets.length > 0 ? targets : [".github/workflows"];
-const { checkedFiles, errors } = validateWorkflowTargets(resolvedTargets);
+export function runCli(argv, io = { log: console.log, error: console.error }) {
+  const resolvedTargets = argv.length > 0 ? argv : [".github/workflows"];
+  const { checkedFiles, errors } = validateWorkflowTargets(resolvedTargets);
 
-if (errors.length > 0) {
-  for (const err of errors) {
-    console.error(`::error::${err}`);
+  if (errors.length > 0) {
+    for (const err of errors) {
+      io.error(`::error::${err}`);
+    }
+    return 1;
   }
-  process.exit(1);
+
+  io.log(`Validated workflow job dependencies (${checkedFiles.length} files).`);
+  return 0;
 }
 
-console.log(`Validated workflow job dependencies (${checkedFiles.length} files).`);
+if (import.meta.main) {
+  process.exit(runCli(process.argv.slice(2)));
+}
