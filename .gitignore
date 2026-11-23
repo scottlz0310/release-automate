@@ -12,3 +12,4 @@ desktop.ini
 .env.*
 !.env.example
 coverage.xml
+node_modules/

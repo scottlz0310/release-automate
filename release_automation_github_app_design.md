@@ -54,11 +54,11 @@ Organization (`scottlz0310`) 内の全リポジトリで共通利用できるよ
 
 1. GitHub の **Organization Settings (`https://github.com/organizations/scottlz0310/settings/apps`) → Developer settings → GitHub Apps → New GitHub App** を開きます。
 2. 次を設定します。
-   * **GitHub App name:** `scottlz0310-release-bot`
-   * **Homepage URL:** `https://github.com/scottlz0310/release-automate`
-   * **Webhook:** **Active** を無効にする
-   * **Repository permissions:** `Contents: Read and write`、`Pull requests: Read and write`
-   * **Where can this GitHub App be installed?:** `Only on this organization`
+   - **GitHub App name:** `scottlz0310-release-bot`
+   - **Homepage URL:** `https://github.com/scottlz0310/release-automate`
+   - **Webhook:** **Active** を無効にする
+   - **Repository permissions:** `Contents: Read and write`、`Pull requests: Read and write`
+   - **Where can this GitHub App be installed?:** `Only on this organization`
 3. App を作成し、設定画面の **App ID** と **Client ID** を控えます。App ID は既存バックアップの識別・照合に保持し、Client ID を v3 の認証に使います。
 
 ### 2.2. 秘密鍵の生成とバックアップ
@@ -72,9 +72,9 @@ $pem = "$env:USERPROFILE\Downloads\scottlz0310-release-bot.private-key.pem"
 pwsh ./scripts/backup-release-bot-key.ps1 -PemPath $pem -AppId 5074929
 ```
 
-* `bw` が PATH 上にある場合、Bitwarden をローカルプロンプトで解錠し、fingerprint ごとの Secure Note に保存します。既存の同一鍵は照合して再利用します。fingerprint を含まない旧形式名の Secure Note は同じ鍵の場合だけ再利用し、別の鍵を保持している場合は残したまま新しい項目を作成します。`bw` が存在しても解錠や保存に失敗した場合、別形式へ自動フォールバックせず停止します。
-* `bw` がない場合、`ConvertFrom-SecureString` の Windows DPAPI 保護を使って `%LOCALAPPDATA%\release-automate\release-bot-keys` に保存し、ファイルと保存先ディレクトリの ACL を現在の Windows ユーザーに限定します。ファイルは同じ Windows ユーザーのプロファイルからのみ復号できます。
-* PEM はバックアップ時には削除しません。出力された `SHA256:...` fingerprint と、DPAPI 保存時は表示されたバックアップファイルパスを控えます。
+- `bw` が PATH 上にある場合、Bitwarden をローカルプロンプトで解錠し、fingerprint ごとの Secure Note に保存します。既存の同一鍵は照合して再利用します。fingerprint を含まない旧形式名の Secure Note は同じ鍵の場合だけ再利用し、別の鍵を保持している場合は残したまま新しい項目を作成します。`bw` が存在しても解錠や保存に失敗した場合、別形式へ自動フォールバックせず停止します。
+- `bw` がない場合、`ConvertFrom-SecureString` の Windows DPAPI 保護を使って `%LOCALAPPDATA%\release-automate\release-bot-keys` に保存し、ファイルと保存先ディレクトリの ACL を現在の Windows ユーザーに限定します。ファイルは同じ Windows ユーザーのプロファイルからのみ復号できます。
+- PEM はバックアップ時には削除しません。出力された `SHA256:...` fingerprint と、DPAPI 保存時は表示されたバックアップファイルパスを控えます。
 
 ### 2.3. バックアップの復号・照合
 
@@ -133,23 +133,26 @@ GitHub の鍵ローテーション手順は[公式ドキュメント](https://do
 ### 3.1. リリース準備 PR 起票 (`reusable-prepare-release.yml`)
 
 #### 入力パラメータ (`inputs`)
-| パラメータ名 | 型 | 必須 | デフォルト値 | 説明 |
-| :--- | :--- | :--- | :--- | :--- |
-| `target_version` | string | **Yes** | - | リリース対象バージョン（例: `1.2.0` または `v1.2.0`）。SemVer 形式を厳格に検証 |
-| `bump_strategy` | string | No | `none` | バージョンファイル更新戦略 (`none`, `npm`, `rust`, `dotnet`, `go`) |
-| `version_file` | string | No | `""` | `bump_strategy` が `go` または `dotnet` の場合の対象ファイルパス（`rust` では任意指定） |
-| `changelog_path` | string | No | `CHANGELOG.md` | CHANGELOG ファイルの相対パス |
-| `base_branch` | string | No | `main` | PR のマージ先ベースブランチ |
-| `branch_prefix` | string | No | `release/` | 作成するリリースブランチの接頭辞 |
-| `commit_prefix` | string | No | `chore(release):` | コミットおよび PR タイトルの接頭辞 |
+
+| パラメータ名     | 型     | 必須    | デフォルト値      | 説明                                                                                    |
+| :--------------- | :----- | :------ | :---------------- | :-------------------------------------------------------------------------------------- |
+| `target_version` | string | **Yes** | -                 | リリース対象バージョン（例: `1.2.0` または `v1.2.0`）。SemVer 形式を厳格に検証          |
+| `bump_strategy`  | string | No      | `none`            | バージョンファイル更新戦略 (`none`, `npm`, `rust`, `dotnet`, `go`)                      |
+| `version_file`   | string | No      | `""`              | `bump_strategy` が `go` または `dotnet` の場合の対象ファイルパス（`rust` では任意指定） |
+| `changelog_path` | string | No      | `CHANGELOG.md`    | CHANGELOG ファイルの相対パス                                                            |
+| `base_branch`    | string | No      | `main`            | PR のマージ先ベースブランチ                                                             |
+| `branch_prefix`  | string | No      | `release/`        | 作成するリリースブランチの接頭辞                                                        |
+| `commit_prefix`  | string | No      | `chore(release):` | コミットおよび PR タイトルの接頭辞                                                      |
 
 #### シークレット (`secrets`)
-| シークレット名 | 必須 | 説明 |
-| :--- | :--- | :--- |
-| `RELEASE_BOT_CLIENT_ID` | **Yes** | GitHub App の Client ID（旧 App ID への代替なし） |
-| `RELEASE_BOT_PRIVATE_KEY` | **Yes** | GitHub App の秘密鍵（PEM 形式） |
+
+| シークレット名            | 必須    | 説明                                              |
+| :------------------------ | :------ | :------------------------------------------------ |
+| `RELEASE_BOT_CLIENT_ID`   | **Yes** | GitHub App の Client ID（旧 App ID への代替なし） |
+| `RELEASE_BOT_PRIVATE_KEY` | **Yes** | GitHub App の秘密鍵（PEM 形式）                   |
 
 #### 処理の流れ
+
 1. `target_version` を正規表現でバリデーション（SemVer 以外の不正文字列やコマンドインジェクションを遮断）。
 2. `actions/create-github-app-token`（SHA 固定）で短寿命トークンを取得。
 3. ベースブランチをチェックアウトし、Git ユーザーを Bot 名義（`${app-slug}[bot]`）に設定。
@@ -162,18 +165,21 @@ GitHub の鍵ローテーション手順は[公式ドキュメント](https://do
 ### 3.2. 本番リリース発行 (`reusable-publish-release.yml`)
 
 #### 入力パラメータ (`inputs`)
-| パラメータ名 | 型 | 必須 | デフォルト値 | 説明 |
-| :--- | :--- | :--- | :--- | :--- |
-| `commit_message_prefix` | string | No | `chore(release):` | リリースマージコミットを検知するための接頭辞 |
-| `changelog_path` | string | No | `CHANGELOG.md` | リリースノート抽出対象の CHANGELOG パス |
-| `draft` | boolean | No | `false` | `true` なら draft 作成のみ行い、成果物検証後に finalize を呼ぶ |
+
+| パラメータ名            | 型      | 必須 | デフォルト値      | 説明                                                           |
+| :---------------------- | :------ | :--- | :---------------- | :------------------------------------------------------------- |
+| `commit_message_prefix` | string  | No   | `chore(release):` | リリースマージコミットを検知するための接頭辞                   |
+| `changelog_path`        | string  | No   | `CHANGELOG.md`    | リリースノート抽出対象の CHANGELOG パス                        |
+| `draft`                 | boolean | No   | `false`           | `true` なら draft 作成のみ行い、成果物検証後に finalize を呼ぶ |
 
 出力は `tag_name`、`target_sha`、`release_state`（`draft` または `published`）。リリースコミット以外でジョブがスキップされた場合は空になります。
 
 #### 必要な権限 (`permissions`)
-* `contents: write`（タグのプッシュおよび GitHub Release の作成）
+
+- `contents: write`（タグのプッシュおよび GitHub Release の作成）
 
 #### 処理の流れ
+
 1. `publish` ジョブレベルで `startsWith(github.event.head_commit.message, inputs.commit_message_prefix)` を強制評価。
 2. トリガーイベントの正確なコミット SHA (`${{ github.sha }}`) をチェックアウト（可変ブランチへの依存を排除）。
 3. コミットメッセージからタグ名（`vX.Y.Z`）を抽出。
@@ -183,12 +189,12 @@ GitHub の鍵ローテーション手順は[公式ドキュメント](https://do
 
 ### 3.3. draft Release の公開 (`reusable-finalize-release.yml`)
 
-| 入力 | 型 | 説明 |
-| :--- | :--- | :--- |
-| `tag_name` | string | publish workflow の同名出力 |
-| `target_sha` | string | publish workflow の同名出力 |
-| `resume` | boolean | 既定 false。true は保護された既定ブランチの手動実行から既存 draft の公開を再開 |
-| `commit_message_prefix` | string | 既定 `chore(release):`。再開時に確認する対象コミットの接頭辞（publish と同じ値） |
+| 入力                    | 型      | 説明                                                                             |
+| :---------------------- | :------ | :------------------------------------------------------------------------------- |
+| `tag_name`              | string  | publish workflow の同名出力                                                      |
+| `target_sha`            | string  | publish workflow の同名出力                                                      |
+| `resume`                | boolean | 既定 false。true は保護された既定ブランチの手動実行から既存 draft の公開を再開   |
+| `commit_message_prefix` | string  | 既定 `chore(release):`。再開時に確認する対象コミットの接頭辞（publish と同じ値） |
 
 `contents: write` を持つ finalize job は、同じ caller run の `github.sha`、タグの解決先 SHA、Release の draft 状態を確認して公開する。公開に成功したが後続確認に失敗した場合も、同じ run の再実行では公開済み状態を無変更で確認できる。利用側は成果物を Release から再取得・検証する job を置き、その成功を `needs` で finalize の前提にする。タグ push イベントから別 workflow を起動しない。caller の具体例は [README](README.md#draft-作成後に成果物を検証して公開する場合) を参照。
 
@@ -212,7 +218,7 @@ on:
   workflow_dispatch:
     inputs:
       target_version:
-        description: 'Release version (e.g. 1.2.0)'
+        description: "Release version (e.g. 1.2.0)"
         required: true
         type: string
 
@@ -227,22 +233,27 @@ jobs:
 ```
 
 #### 言語別設定例
+
 - **Node.js**:
+
   ```yaml
   bump_strategy: "npm"
   ```
 - **Rust**:
+
   ```yaml
   bump_strategy: "rust"
   # Cargo.toml 以外のファイルパスを更新する場合のみ指定（省略時は Cargo.toml）
   # version_file: "crates/app/Cargo.toml"
   ```
 - **.NET / C#**:
+
   ```yaml
   bump_strategy: "dotnet"
   version_file: "src/MyApp/MyApp.csproj"
   ```
 - **Go**:
+
   ```yaml
   bump_strategy: "go"
   version_file: "internal/version/version.go"
@@ -282,25 +293,23 @@ jobs:
 
 ---
 
-## 6. 開発環境・ローカル品質ゲート（Lefthook）
+## 6. 開発環境・ローカル品質ゲート（Bun / Biome / Lefthook）
 
-本リポジトリ自体の開発・保守において、ワークフロー構文ミスやスクリプト不具合を早期検知するため、Lefthook による Git フックを導入しています。
+本リポジトリ自体の開発・保守において、ワークフロー YAML や設定ファイル・ドキュメントの構文・フォーマット不備およびスクリプト不具合を早期検知するため、Biome と Lefthook による品質ゲートを導入しています。
 
 ### 6.1. セットアップ手順
 
-1. **Lefthook CLI の導入**:
+1. **依存関係のインストールとフックの有効化**:
+
    ```powershell
-   go install github.com/evilmartians/lefthook@latest
-   # または scoop install lefthook
+   bun install
    ```
-2. **フックの有効化**:
-   ```powershell
-   lefthook install
-   ```
+
+   `package.json` の `prepare` スクリプトにより `lefthook install` が自動実行されます。
 
 ### 6.2. 品質ゲートの構成
 
 - **`pre-commit`**:
-  `.github/workflows/*.{yml,yaml}` の変更時に `actionlint -shellcheck=` を実行し、Reusable Workflows の構文およびスキーマ妥当性をコミット前に検証します。
+  ステージされた YAML / JSON / Markdown ファイルに対して `bunx biome check --no-errors-on-unmatched --files-ignore-unknown=true {staged_files}` を実行し、ワークフローや設定ファイルの構文・フォーマット妥当性をコミット前に検証します。
 - **`pre-push`**:
   プッシュ前に `pwsh -NoProfile -Command "Invoke-Pester -Path ./tests"` を自動実行し、鍵管理スクリプト（`scripts/*.ps1`）のユニットテストが通ることを強制します。

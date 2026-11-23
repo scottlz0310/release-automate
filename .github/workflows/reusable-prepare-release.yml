@@ -4,50 +4,50 @@ on:
   workflow_call:
     inputs:
       target_version:
-        description: 'Release target version (e.g. 1.2.0 or v1.2.0)'
+        description: "Release target version (e.g. 1.2.0 or v1.2.0)"
         required: true
         type: string
       bump_strategy:
-        description: 'Built-in version bump strategy: none, npm, rust, dotnet, go, tauri'
+        description: "Built-in version bump strategy: none, npm, rust, dotnet, go, tauri"
         required: false
         type: string
-        default: 'none'
+        default: "none"
       version_file:
-        description: 'Path to version file (required when bump_strategy is go or dotnet, optional for rust; for tauri, the path to tauri.conf.json, default src-tauri/tauri.conf.json)'
+        description: "Path to version file (required when bump_strategy is go or dotnet, optional for rust; for tauri, the path to tauri.conf.json, default src-tauri/tauri.conf.json)"
         required: false
         type: string
-        default: ''
+        default: ""
       changelog_path:
-        description: 'Relative path to CHANGELOG.md'
+        description: "Relative path to CHANGELOG.md"
         required: false
         type: string
-        default: 'CHANGELOG.md'
+        default: "CHANGELOG.md"
       additional_changelog_paths:
-        description: '同じ版へ確定する翻訳原稿のパス（JSON 配列）。Release 本文の原稿指定とは独立'
+        description: "同じ版へ確定する翻訳原稿のパス（JSON 配列）。Release 本文の原稿指定とは独立"
         required: false
         type: string
-        default: '[]'
+        default: "[]"
       base_branch:
-        description: 'Base branch to create PR against'
+        description: "Base branch to create PR against"
         required: false
         type: string
-        default: 'main'
+        default: "main"
       branch_prefix:
-        description: 'Prefix for release branch name'
+        description: "Prefix for release branch name"
         required: false
         type: string
-        default: 'release/'
+        default: "release/"
       commit_prefix:
-        description: 'Prefix for commit message and PR title'
+        description: "Prefix for commit message and PR title"
         required: false
         type: string
-        default: 'chore(release):'
+        default: "chore(release):"
     secrets:
       RELEASE_BOT_CLIENT_ID:
-        description: 'GitHub App Client ID for bot authentication'
+        description: "GitHub App Client ID for bot authentication"
         required: true
       RELEASE_BOT_PRIVATE_KEY:
-        description: 'GitHub App Private Key (PEM format)'
+        description: "GitHub App Private Key (PEM format)"
         required: true
 
 jobs:

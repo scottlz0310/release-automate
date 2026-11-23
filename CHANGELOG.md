@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Bun（`.bun-version`）・Biome（`biome.json`）・Lefthook の依存設定（`package.json` / `bun.lock`）と Renovate 共有プリセットを追加し、CI および `pre-commit` フックでの YAML / JSON / Markdown 等のフォーマット・リントを Biome に一本化（#62）。
+
+### Removed
+
+- 上流のメンテナンス停滞に伴い、`actionlint` 一式（CI の `actionlint` ジョブ、`.github/actionlint.yaml`、`scripts/check-actionlint-workaround.sh`、`tests/actionlint-workaround.sh`、`lefthook.yml` の `actionlint` フック、関連ドキュメント記述）を撤去（#62）。
+
 ## [3.3.0] - 2026-11-14
 
 ### Added
@@ -20,39 +28,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [3.2.1] - 2026-10-31
 
 ### Fixed
+
 - prepare の CHANGELOG 比較元を、対象版より小さい到達可能な固定タグに限定。旧系列の高い版や同じ優先順位の build metadata 付きタグを選ばないようにした。
 
 ## [3.2.0] - 2026-10-26
 
 ### Added
+
 - prepare に `additional_changelog_paths` を追加し、翻訳 CHANGELOG を同じ版・日付・固定タグの比較リンクへ同時に確定する。全原稿を検証してから更新し、主原稿だけの既定動作は維持する（#45）。
 - finalize に任意の `append_release_evidence`、Docker image/digest、`verification_results` を追加。呼出元の成功した依存ジョブと実 build の digest を共通書式で公開後に追記し、再実行では専用部分だけを置換して重複を防ぐ。不正入力は公開前に拒否し、本文更新失敗や読み戻し不一致を成功扱いしない（#45）。
 
 ### Fixed
+
 - 導入先の既存 RC 公開を維持できるよう、prerelease タグには GitHub Release の prerelease 属性を指定する。build metadata とハイフンを保持し、CHANGELOG の版を正規表現ではなく文字列として照合する。自己リリースの安定版限定契約は維持する。
 - .NET の AssemblyVersion/FileVersion から metadata も除去し、数値版の不正を防ぐ。npm 戦略は metadata を保持できないためファイル更新前に明示的に拒否し、タグと成果物の版の食い違いを防ぐ。
 
 ## [3.1.0] - 2026-10-21
 
 ### Added
+
 - 自己リリース用 caller を追加。手動 prepare による準備 PR のマージ後、対象 SHA の CI 成功を確認して draft・公開・メジャータグ更新まで自動実行する。更新前 SHA の照合、古いコミットへの巻き戻し拒否、失敗時の再実行・既存 draft 再開とモック検証を含む（#42）。
 
 ## [3.0.0] - 2026-10-21
 
 ### Added
+
 - actionlint の Ubuntu 26.04 限定除外について、CI と同じ固定イメージの除外なし診断を分類し、不要化時・想定外診断・実行障害時に CI を失敗させる検知とモック検証を追加（#39）。
 - finalize に既定 false の `resume` を追加し、修正後の保護された既定ブランチの手動実行から既存 draft の公開を再開できるようにした。再開時は祖先関係・リリースコミット・タグ・Release 対象を検証し、公開後の Release 置換・記録対象変更も検出。既定の同一 SHA 契約は維持（#37）。
 
 ### Changed
+
 - **破壊的変更（v3 向け）:** リリース準備の認証を必須の `RELEASE_BOT_CLIENT_ID` に移行し、旧 `RELEASE_BOT_APP_ID` への代替を廃止。secret 登録・鍵ローテーションにも `-ClientId` を必須化。数値 App ID による既存バックアップの照合と保存形式は維持し、旧 secret は更新・削除しない（#33）。
 - Linux の CI 品質ゲートを Ubuntu 26.04 に先行移行。actionlint の未対応ラベル診断だけを CI 定義内で除外し、上流対応版への更新後に削除する。reusable workflows の `ubuntu-latest` と Windows の Pester は維持（#34）。
 
 ### Fixed
+
 - README の draft 検証ジョブの権限を `contents: write` に修正し、draft の読み取り・reusable workflow 呼び出し元の権限と checkout なしでの `gh` の対象指定を説明（#30）。
 
 ## [2.1.0] - 2026-10-04
 
 ### Added
+
 - リリース準備に `bump_strategy: tauri` を追加。`package.json`、`tauri.conf.json`、`Cargo.toml`、`Cargo.lock` の版を、まとめて更新する。更新の前に 3 つのファイルの版が一致していることを確認し、JSON は整形と改行コードを保ったまま版の値だけを置き換える。シナリオテスト `tests/tauri-prepare.sh` を CI に追加。
 - lefthook による Git フック（`pre-commit` での actionlint によるワークフロー構文検証、`pre-push` での Pester テスト）を追加。
 - README および設計書に Lefthook の導入手順と `lefthook install` によるフック有効化手順を追記。
@@ -60,14 +76,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.0.0] - 2026-09-27
 
 ### Added
+
 - GitHub App 鍵管理スクリプトの Pester 6.2.0 テスト、Windows CI、Codecov カバレッジ送信を追加。
 - リリースコミットに固定した draft Release、同一 SHA の再実行、成果物検証後に公開する reusable workflow とモック検証を追加。
 
 ### Changed
+
 - Pester の固定バージョンを共有 Renovate プリセットで追跡。
 - Rust のリリース準備では、Git で追跡済みの workspace `Cargo.lock` を必須とする。
 
 ### Fixed
+
 - Release 作成直後の一覧反映遅延で publish workflow が失敗する問題を修正。
 - Rust のリリース準備で workspace の `Cargo.lock` を package version と同期し、`--locked` で検証するよう修正。
 - DPAPI バックアップの ACL 設定が標準ユーザーで権限エラーになる問題、旧形式 Secure Note の App ID 不一致、secret 設定後の fingerprint 表示が二重接頭辞になる問題を修正。
@@ -75,6 +94,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.0] - 2026-09-26
 
 ### Added
+
 - GitHub App 鍵の Bitwarden / DPAPI バックアップ、ダウンロード PEM との復号照合、Organization Actions secrets 登録・ローテーション用 PowerShell スクリプトと手順を追加。
 - Added CI workflow (`.github/workflows/ci.yml`) with `actionlint` and `shellcheck` static analysis.
 - Added `rust` bump strategy in `reusable-prepare-release.yml` for updating package version in `Cargo.toml`.
@@ -86,16 +106,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Renovate configuration extending `@scottlz0310/renovate-config`.
 
 ### Changed
+
 - Improved `go` bump strategy in `reusable-prepare-release.yml` with case-insensitive `version` matching and flexible whitespace handling.
 
 ### Removed
+
 - Removed `poetry` bump strategy from `reusable-prepare-release.yml` and documentation.
 
 ### Security
+
 - Hardened third-party GitHub Actions by pinning to full commit SHAs.
 - Prevented command injection by replacing raw command execution with safe `bump_strategy` options and strict SemVer validation.
 
 ### Fixed
+
 - Switched `ci.yml` to `docker://rhysd/actionlint` with digest pinning and `contents: read` permission, ensuring static analysis and annotations function in public fork PRs without write permissions.
 - Resolved shellcheck SC2016 info warning in `reusable-prepare-release.yml` by using string concatenation in inline Node.js script.
 - Fixed `dotnet` bump strategy in `reusable-prepare-release.yml` to support multiline XML property elements and fail if zero replacements occur.

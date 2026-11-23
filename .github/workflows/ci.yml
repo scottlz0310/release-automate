@@ -13,24 +13,24 @@ permissions:
   contents: read
 
 jobs:
-  actionlint:
-    name: Lint Workflows (actionlint)
+  biome:
+    name: Lint & Format (Biome)
     runs-on: ubuntu-26.04
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Run actionlint
-        uses: docker://rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          args: -color
+          bun-version-file: .bun-version
 
-      - name: 限定除外が現在も必要か確認
-        run: |
-          # 通常 lint の uses 宣言を正本とし、digest を二重管理しない。
-          image=$(awk '$1 == "uses:" && $2 ~ /^docker:\/\/rhysd\/actionlint@sha256:/ { sub(/\r$/, "", $2); sub(/^docker:\/\//, "", $2); print $2 }' .github/workflows/ci.yml)
-          bash scripts/check-actionlint-workaround.sh \
-            docker run --rm --network none -v "$GITHUB_WORKSPACE:/repo:ro" -w /repo "$image"
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Check formatting and linting
+        run: bun run check
 
   release-workflows:
     name: Test release workflows
@@ -57,11 +57,8 @@ jobs:
       - name: Run Tauri prepare scenarios
         run: bash tests/tauri-prepare.sh
 
-      - name: 限定除外の判定シナリオを検証
-        run: bash tests/actionlint-workaround.sh
-
       - name: Check scenario shell script
-        run: shellcheck tests/release-workflows.sh tests/release-adoption.sh tests/managed-prepare.sh tests/rust-prepare.sh tests/tauri-prepare.sh scripts/check-actionlint-workaround.sh tests/actionlint-workaround.sh scripts/self-release.sh tests/self-release.sh
+        run: shellcheck tests/release-workflows.sh tests/release-adoption.sh tests/managed-prepare.sh tests/rust-prepare.sh tests/tauri-prepare.sh scripts/self-release.sh tests/self-release.sh
 
   pester:
     name: Test key management (Pester)

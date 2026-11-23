@@ -4,68 +4,68 @@ on:
   workflow_call:
     inputs:
       tag_name:
-        description: 'Tag returned by reusable-publish-release.yml'
+        description: "Tag returned by reusable-publish-release.yml"
         required: true
         type: string
       target_sha:
-        description: 'Commit SHA returned by reusable-publish-release.yml'
+        description: "Commit SHA returned by reusable-publish-release.yml"
         required: true
         type: string
       resume:
-        description: '保護された既定ブランチの手動実行から既存 draft の公開を再開する'
+        description: "保護された既定ブランチの手動実行から既存 draft の公開を再開する"
         required: false
         type: boolean
         default: false
       commit_message_prefix:
-        description: '再開時に確認するリリースコミット件名の接頭辞（publish と同じ値）'
+        description: "再開時に確認するリリースコミット件名の接頭辞（publish と同じ値）"
         required: false
         type: string
-        default: 'chore(release):'
+        default: "chore(release):"
       append_release_evidence:
-        description: '公開後に Docker・検証の証跡を追記する'
+        description: "公開後に Docker・検証の証跡を追記する"
         required: false
         type: boolean
         default: false
       docker_image:
-        description: 'build ジョブが公開したコンテナイメージ名（digest と対で指定）'
+        description: "build ジョブが公開したコンテナイメージ名（digest と対で指定）"
         required: false
         type: string
-        default: ''
+        default: ""
       docker_digest:
-        description: 'build ジョブが返した sha256 digest'
+        description: "build ジョブが返した sha256 digest"
         required: false
         type: string
-        default: ''
+        default: ""
       verification_results:
-        description: '呼出元の toJSON(needs)。成功した依存ジョブの結果を記録する'
+        description: "呼出元の toJSON(needs)。成功した依存ジョブの結果を記録する"
         required: false
         type: string
-        default: '{}'
+        default: "{}"
       notify_scoop_bucket:
-        description: '公開後に Scoop バケットの更新ワークフローへ repository_dispatch を送信する'
+        description: "公開後に Scoop バケットの更新ワークフローへ repository_dispatch を送信する"
         required: false
         type: boolean
         default: false
       scoop_bucket_repo:
-        description: '通知先の Scoop バケットリポジトリ（repo 名または owner/repo。既定は同一オーナーの scoop-bucket）'
+        description: "通知先の Scoop バケットリポジトリ（repo 名または owner/repo。既定は同一オーナーの scoop-bucket）"
         required: false
         type: string
-        default: 'scoop-bucket'
+        default: "scoop-bucket"
       scoop_manifest:
-        description: '更新対象の Scoop マニフェスト名（省略時はリポジトリ名の小文字化）'
+        description: "更新対象の Scoop マニフェスト名（省略時はリポジトリ名の小文字化）"
         required: false
         type: string
-        default: ''
+        default: ""
     secrets:
       RELEASE_BOT_CLIENT_ID:
-        description: 'GitHub App Client ID for Scoop bucket dispatch'
+        description: "GitHub App Client ID for Scoop bucket dispatch"
         required: false
       RELEASE_BOT_PRIVATE_KEY:
-        description: 'GitHub App Private Key (PEM format) for Scoop bucket dispatch'
+        description: "GitHub App Private Key (PEM format) for Scoop bucket dispatch"
         required: false
     outputs:
       release_state:
-        description: 'published after successful finalization'
+        description: "published after successful finalization"
         value: ${{ jobs.finalize.outputs.release_state }}
 
 jobs:
