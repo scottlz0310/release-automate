@@ -32,6 +32,12 @@ jobs:
       - name: Check formatting and linting
         run: bun run check
 
+      - name: Validate workflow job dependencies
+        run: bun run validate:workflows
+
+      - name: Test workflow dependency validator
+        run: bun run test:workflows
+
   release-workflows:
     name: Test release workflows
     runs-on: ubuntu-26.04

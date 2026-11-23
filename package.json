@@ -7,6 +7,8 @@
     "check:fix": "biome check --write .",
     "format": "biome format --write .",
     "lint": "biome lint .",
+    "validate:workflows": "bun scripts/validate-workflow-needs.mjs",
+    "test:workflows": "bun test tests/validate-workflow-needs.test.mjs",
     "prepare": "lefthook install"
   },
   "devDependencies": {

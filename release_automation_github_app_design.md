@@ -310,6 +310,6 @@ jobs:
 ### 6.2. 品質ゲートの構成
 
 - **`pre-commit`**:
-  ステージされた YAML / JSON / Markdown ファイルに対して `bunx biome check --no-errors-on-unmatched --files-ignore-unknown=true {staged_files}` を実行し、ワークフローや設定ファイルの構文・フォーマット妥当性をコミット前に検証します。
+  ステージされた YAML / JSON / Markdown / JS ファイルに対して `bunx biome check --no-errors-on-unmatched --files-ignore-unknown=true {staged_files}` を実行し、`.github/workflows/*.{yml,yaml}` に対しては `bun scripts/validate-workflow-needs.mjs {staged_files}` でジョブ依存（`needs`）の整合性をコミット前に検証します。
 - **`pre-push`**:
   プッシュ前に `pwsh -NoProfile -Command "Invoke-Pester -Path ./tests"` を自動実行し、鍵管理スクリプト（`scripts/*.ps1`）のユニットテストが通ることを強制します。

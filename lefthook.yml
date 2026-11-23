@@ -5,8 +5,11 @@ pre-commit:
   parallel: true
   commands:
     biome:
-      glob: "*.{json,jsonc,md,yml,yaml}"
+      glob: "*.{js,mjs,json,jsonc,md,yml,yaml}"
       run: bunx biome check --no-errors-on-unmatched --files-ignore-unknown=true {staged_files}
+    workflow-needs:
+      glob: ".github/workflows/*.{yml,yaml}"
+      run: bun scripts/validate-workflow-needs.mjs {staged_files}
 
 pre-push:
   commands:
