@@ -6,11 +6,11 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: '修正後の既定ブランチから再開する既存タグ（例: v3.1.0）'
+        description: "修正後の既定ブランチから再開する既存タグ（例: v3.1.0）"
         required: true
         type: string
       target_sha:
-        description: '元のリリースコミットの完全 SHA'
+        description: "元のリリースコミットの完全 SHA"
         required: true
         type: string
 

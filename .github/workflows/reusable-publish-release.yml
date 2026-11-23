@@ -4,29 +4,29 @@ on:
   workflow_call:
     inputs:
       commit_message_prefix:
-        description: 'Prefix of commit message to trigger release'
+        description: "Prefix of commit message to trigger release"
         required: false
         type: string
-        default: 'chore(release):'
+        default: "chore(release):"
       changelog_path:
-        description: 'Relative path to CHANGELOG.md'
+        description: "Relative path to CHANGELOG.md"
         required: false
         type: string
-        default: 'CHANGELOG.md'
+        default: "CHANGELOG.md"
       draft:
-        description: 'Create a draft release for artifact verification before publishing'
+        description: "Create a draft release for artifact verification before publishing"
         required: false
         type: boolean
         default: false
     outputs:
       tag_name:
-        description: 'Release tag'
+        description: "Release tag"
         value: ${{ jobs.publish.outputs.tag_name }}
       target_sha:
-        description: 'Commit targeted by the release tag'
+        description: "Commit targeted by the release tag"
         value: ${{ jobs.publish.outputs.target_sha }}
       release_state:
-        description: 'draft or published; empty when the release job is skipped'
+        description: "draft or published; empty when the release job is skipped"
         value: ${{ jobs.publish.outputs.release_state }}
 
 jobs:

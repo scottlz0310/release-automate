@@ -1,0 +1,23 @@
+{
+  "name": "release-automate",
+  "private": true,
+  "description": "Reusable GitHub Actions workflows for automated releases in scottlz0310",
+  "scripts": {
+    "check": "biome check .",
+    "check:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "lint": "biome lint .",
+    "test": "bun test",
+    "test:coverage": "bun test --coverage --coverage-reporter=lcov",
+    "validate:workflows": "bun scripts/validate-workflow-needs.mjs",
+    "prepare": "lefthook install"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.6.8",
+    "lefthook": "^2.2.2"
+  },
+  "trustedDependencies": [
+    "@biomejs/biome",
+    "lefthook"
+  ]
+}

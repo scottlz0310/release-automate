@@ -1,5 +1,0 @@
-paths:
-  .github/workflows/ci.yml:
-    ignore:
-      # 上流対応版への更新後、除外と専用の検知処理・テストを同じ PR で撤去する（#39）。
-      - '^label "ubuntu-26\.04" is unknown\.'

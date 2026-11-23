@@ -59,31 +59,27 @@ v3 の prepare workflow は `RELEASE_BOT_CLIENT_ID` を必須とし、旧 `RELEA
 
 登録・ローテーションスクリプトは旧 `RELEASE_BOT_APP_ID` を更新・削除しません。旧 v2 caller が残る間は旧 secret を保持し、撤去は全 caller の移行確認後に別途判断します。Client ID の登録、caller の変更、v3 の公開はそれぞれ運用時に実施する作業です。
 
-### 開発セットアップと品質ゲート（Lefthook）
+### 開発セットアップと品質ゲート（Bun / Biome / Lefthook）
 
-本リポジトリの開発では [Lefthook](https://github.com/evilmartians/lefthook) を使用してコミット前・プッシュ前の品質ゲートを管理しています。
+本リポジトリの開発では [Biome](https://biomejs.dev/) で YAML / JSON / Markdown 等のフォーマット・リントを行い、[Lefthook](https://github.com/evilmartians/lefthook) でコミット前・プッシュ前の品質ゲートを管理しています。
 
-1. **Lefthook のインストール**（未導入の場合）:
+1. **依存関係のインストールと Git hooks の有効化**（Bun 導入済み環境）:
+
    ```powershell
-   go install github.com/evilmartians/lefthook@latest
-   # または scoop install lefthook / winget install EvilMartians.Lefthook
+   bun install
    ```
 
-2. **Git hooks のセットアップ**:
-   クローン後、リポジトリルートで以下を実行して Git hooks を有効化します。
+   `prepare` スクリプトにより `lefthook install` が自動実行されます。
+   - `pre-commit`: 変更された YAML / JSON / Markdown / JS ファイルに対して `bunx biome check` で構文・フォーマットを検証し、`.github/workflows/*.{yml,yaml}` に対してジョブ依存（`needs`）の整合性を検証
+   - `pre-push`: プッシュ前に `bun test` と Pester テストを自動実行
+
+2. **手動チェック**:
+
    ```powershell
-   lefthook install
+   bun run check
+   bun run validate:workflows
+   bun run test
    ```
-   - `pre-commit`: ワークフロー定義ファイル（`.github/workflows/*.yml`）変更時に `actionlint` で構文チェック
-   - `pre-push`: プッシュ前に Pester テストを自動実行
-
-### actionlint の一時除外の追跡
-
-CI は通常の actionlint に加え、同じ `uses` 宣言の固定 Docker イメージで除外なしの検査を行います。`ci.yml` の Ubuntu 26.04 未認識診断だけなら継続し、診断がなくなれば撤去を促して失敗します。他の診断・実行障害・解析できない出力も失敗として扱います。
-
-[Issue #39](https://github.com/scottlz0310/release-automate/issues/39) は検知導入後も閉じず、2026-11-20（日本時間）に上流を再評価します。対応版への更新後、`.github/actionlint.yaml` の対象除外、CI の専用確認ステップ、`scripts/check-actionlint-workaround.sh`、`tests/actionlint-workaround.sh` とその CI 呼び出しを同じ PR で撤去し、除外なしの lint と関連 CI の成功を確認します。
-
-判定のモックは `bash tests/actionlint-workaround.sh` で実行できます。CLI は引数で差し替え、実行結果・構造化診断の分類を検証します。
 
 ### 鍵管理スクリプトのテスト
 
@@ -134,7 +130,7 @@ on:
   workflow_dispatch:
     inputs:
       target_version:
-        description: 'Release version (e.g. 1.2.0)'
+        description: "Release version (e.g. 1.2.0)"
         required: true
         type: string
 
@@ -373,7 +369,7 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: '再検証して公開する既存 Release のタグ'
+        description: "再検証して公開する既存 Release のタグ"
         required: true
         type: string
 
